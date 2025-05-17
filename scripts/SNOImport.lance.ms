@@ -2,18 +2,13 @@
 -- Lance ><>
 -- 8/20/2002
 
--------------------------------------------------------------------------------------------
--- Updates & Hacks
+--------------------------------------------------------------------
+-- Updates
 --
 --  4/30/2025 biddle - parse BSP info, try to locate the diffuse map
---  5/01/2025 biddle - build up indexed corner data, avoid need to weld edges
---  5/11/2025 biddle - re-establish smoothing groups from incoming corner normals (maybe)
---  5/11/2025 biddle - quantize the normals and uvees to avoid sliver triangles
+--  5/01/2025 biddle - build up indexed corner data
 --
--------------------------------------------------------------------------------------------
-
-
-filein ((GetDir #scripts) +"\\TopoTools.ms")
+--------------------------------------------------------------------
 
 rollout SNOImport "SNO Import"
 (
@@ -38,7 +33,7 @@ rollout SNOImport "SNO Import"
 
   struct strSpot    ( xform, name )
   struct strDoor    ( index, xform, numVerts, verts )
-  struct strCorner  ( pos=#(), nrm=#(), col=#(), txc=#(), opp=#() )
+  struct strCorner  ( pos, nrm, col, txc )
 
   local snoFileIn
   local dataHeader
@@ -56,7 +51,7 @@ rollout SNOImport "SNO Import"
   local myDoor
 
   local nnkName
-  
+
   group "Options"
   (
     spinner spn_Scale "Scale:" range:[0.0001,1000.0,1.0] type:#float scale:0.01
@@ -76,28 +71,10 @@ rollout SNOImport "SNO Import"
     return point3 (ReadFloat fin) (ReadFloat fin) (ReadFloat fin) 
   )
 
-  fn Quantize v tol = (
-    s = if v < 0 then ceil( (v * tol) - 0.5) else floor( (v * tol) + 0.5)
-    return s / tol
-  )
-
   fn ReadUVee fin =
   (
-    -- Sub-texel accuracy is suspect in a lot 
-    -- of the uv mapping that is encountered
-    u = Quantize (ReadFloat fin) 1024
-    v = Quantize (ReadFloat fin) 1024
-    return point3 u v 0 
+    return point3 (ReadFloat fin) (ReadFloat fin) 0 
   )  
-
-  fn ReadNormal fin = (
-    -- Actual per corner normal values aren't re-used. 
-    -- They matched to generate the smoothing groups.
-    x = Quantize (ReadFloat fin) 256
-    y = Quantize (ReadFloat fin) 256
-    z = Quantize (ReadFloat fin) 256
-    return point3 x y z 
-  )
 
   fn ReadPosThenRot fin =
   (
@@ -184,9 +161,8 @@ rollout SNOImport "SNO Import"
     local m = ReadPosThenRot fin
     local n = ReadLong fin
     local h = #()
-    for i = 1 to n do (
+    for i = 1 to n do
       append h (ReadLong fin)
-    )
 
     return (strDoor index:d xform:m numVerts:n verts:h)
   )
@@ -220,13 +196,13 @@ rollout SNOImport "SNO Import"
 
 
   fn ResetLookup = (
-    return strCorner()
+    return strCorner pos:#() nrm:#() col:#() txc:#()
   )
 
   fn ReadCorner fin =
   (
     local p = fetchIndex dataLookup.pos (ReadVector fin)
-    local n = fetchIndex dataLookup.nrm (ReadNormal fin)
+    local n = fetchIndex dataLookup.nrm (ReadVector fin)
     local c = fetchIndex dataLookup.col (ReadColour fin)
     local u = fetchIndex dataLookup.txc (ReadUVee fin)
     return (strCorner pos:p nrm:n col:c txc:u)
@@ -442,7 +418,7 @@ rollout SNOImport "SNO Import"
 
     -- read corners
     dataCorners = #()
-    dataLookup = strCorner()
+    dataLookup = ResetLookup()
     for i = 1 to dataHeader.numCorners do (
       append dataCorners (ReadCorner fin)
     )
@@ -465,80 +441,92 @@ rollout SNOImport "SNO Import"
     )
     
       return true
-  )  
+  )
 
-  fn selectDoorEdgesForVerts obj doorVertSet =
-  (
-      local edgeList = #()
-      local edgeMap = #() -- prevent duplicates
 
-      format "Look for edges in % (%)\n" doorVertSet doorVertSet.numberset
-      -- Build a list of all edges from faces
-      for f = 1 to getNumFaces obj do
-      (
-        local ff = getFace obj f
-        local faceEdges = #((if ff.x < ff.y then #{ff.x, ff.y} else #{ff.y, ff.x}),
-                            (if ff.y < ff.z then #{ff.y, ff.z} else #{ff.z, ff.y}),
-                            (if ff.z < ff.x then #{ff.z, ff.x} else #{ff.x, ff.z}))
-        for ee in 1 to 3 do
-        (
-          if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
-            local key = (faceEdges[ee] as string) as name
-            if (findItem edgeMap key) == 0 then (
-              format "We have an edge on face % v % (%)\n" f ee faceEdges[ee]            
-              local edgeIndex = 3 * (f-1) + ee
-              append edgeList edgeIndex
-              append edgeMap key
-            ) 
-            else (
-              format "We have a DUPE!! %\n" faceEdges[ee]            
-            )
-          )
-        )
-      )
-  
-      return edgeList
-  )   
-
-  fn MakeDoors snomod = (
+  fn MakeDoors = (
     local i, j
 
-    if (chk_Debug.checked) do (
+    if (chk_Debug.checked) do
       format "debug: creating doors...\n"
-    )
 
-    snomod.tDoorList = #()    
-    for d = 1 to dataHeader.numDoors do
+    myDoor = #()
+    for i = 1 to dataHeader.numDoors do
     (
-      local door = dataDoors[d]
-      local doorVertSet = #{}
-      for j = 1 to door.numVerts do (
-        p = dataCorners[door.verts[j]+1].pos
-        doorVertSet[p] = true
-      ) 
-      local doorEdges = selectDoorEdgesForVerts myMesh doorVertSet
-
-      if (chk_Debug.checked) do (      
-        format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
-        format "$.selectedverts = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen()\n" doorVertSet      
-        format "and these edges %\n" doorEdges
-        format "$.selectededges = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen()\n" doorEdges
-      )  
-
-      local newDoor = SiegeDoor verts:#() edges:#()
-
-      if not (ExtractDoorFromEdgeList myMesh doorEdges newDoor) then (
-        format "Door #% could not be extracted correctly\n" d
-      ) else (
-        format "Door #% was extracted: %\n" d newDoor
+      local doorVert = #()
+      local doorTexc = #()
+      for j = 1 to dataDoors[i].numVerts do
+      (
+        --doorVert[j] = FlipUp dataCorners[dataDoors[i].verts[j]].pos
+        --doorTexc[j] = dataCorners[dataDoors[i].verts[j]].txc
+        local corner = dataCorners[dataDoors[i].verts[j]]
+        doorVert[j] = FlipUp dataLookup.pos[corner.pos]        
+        doorTexc[j] = dataLookup.txc[corner.pos.txc]
       )
 
-      append snomod.tDoorList newDoor
+      local doorFace = #()
+      -- create face from data arrays
+      myDoor[i] = Mesh \
+                  name:     ("Door " + (dataDoors[i].index as string)) \
+                  vertices: doorVert \
+                  faces:    doorFace \
+                  tverts:   doorTexc
 
+      -- set normals for vertices
+      for j = 1 to dataDoors[i].numHotSpots do
+        setNormal myDoor[i] j (FlipUp dataLookup.nrm[dataCorners[dataDoors[i].hotSpots[j]].nrm])
+    )
+  )
+
+  -- faceCornerNormals[faceIndex][cornerIndex] = normalIndex
+  -- where cornerIndex is 1 to 3 (since mesh faces are triangles)
+
+  fn assignSmoothingFromVertexNormals obj faceCornerNormals = (
+    local numFaces = getNumFaces obj
+    local assigned = for i = 1 to numFaces collect 0
+    local groupBit = 1
+
+    for i = 1 to numFaces do (
+        if assigned[i] == 0 then (
+            local stack = #(i)
+            assigned[i] = groupBit
+
+            while stack.count > 0 do (
+                local f1 = stack[stack.count]
+                deleteItem stack stack.count
+
+                local face1 = getFace obj f1
+                local norms1 = faceCornerNormals[f1]
+
+                for f2 = 1 to numFaces do (
+                    if assigned[f2] == 0 then (
+                        local face2 = getFace obj f2
+                        local norms2 = faceCornerNormals[f2]
+                        -- Check for shared vertex
+                        for c1 = 1 to 3 do (
+                            for c2 = 1 to 3 do (
+                                -- is this the same position
+                                if face1[c1] == face2[c2] then (
+                                    -- Compare normals at the shared corner
+                                    if norms1[c1] == norms2[c2] then (
+                                        assigned[f2] = groupBit
+                                        append stack f2
+                                        exit -- move to next face
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+            groupBit *= 2 -- Move to next smoothing group bit
+        )
     )
 
-    BuildDoorDirections myMesh snomod
-
+    -- Apply smoothing groups
+    for i = 1 to numFaces do (
+        setFaceSmoothGroup obj i assigned[i]
+    )
   )
 
   fn MakeMesh = (
@@ -547,68 +535,71 @@ rollout SNOImport "SNO Import"
     if (chk_Debug.checked) do
       format "debug: creating mesh...\n"
 
-    for i = 1 to dataLookup.pos.count do (
-        dataLookup.pos[i] = ((FlipUp dataLookup.pos[i]) * spn_Scale.value * 1000)
+    -- create array of vertices and texture coordinates
+    local meshVert = #()
+    local meshTexc = #()
+
+    for i = 1 to dataCorners.count do (
+      corner = dataCorners[i]
+      p = dataLookup.pos[corner.pos]
+      append meshVert ((FlipUp p) * spn_Scale.value * 1000)
+      append meshTexc dataLookup.txc[corner.txc]
+      format "%: %\n" i corner
     )
 
     -- create array of faces
-    local VertFaces = #()
-    local TexcFaces = #()  
-    local NrmlFaces = #()  
-    local MatiFaces = #() 
+    local meshFace = #()
     local f = 1
-	  local s = 1
-
-    for surface in dataSurfaces do (
-      for j = 1 to (surface.numCorners / 3) do (
-        local cA = dataCorners[surface.faces[j].x + surface.startCorner + 1]
-        local cB = dataCorners[surface.faces[j].y + surface.startCorner + 1]
-        local cC = dataCorners[surface.faces[j].z + surface.startCorner + 1]	
-        VertFaces[f] = [cA.pos, cB.pos, cC.pos]
-        TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
-        NrmlFaces[f] = [cA.nrm, cB.nrm, cC.nrm]
-        MatiFaces[f] = s        
+    for i = 1 to dataHeader.numSurfaces do
+    (
+      for j = 1 to (dataSurfaces[i].numCorners / 3) do
+      (
+        local cX = dataSurfaces[i].faces[j].x + dataSurfaces[i].startCorner + 1
+        local cY = dataSurfaces[i].faces[j].y + dataSurfaces[i].startCorner + 1
+        local cZ = dataSurfaces[i].faces[j].z + dataSurfaces[i].startCorner + 1
+        meshFace[f] = [cX, cY, cZ] as point3
         f += 1
       )
-	    s += 1
     )
 
-    format "We are expecting % faces\n" VertFaces.count
+    meshMids = #()
+    f = 1
+    for i = 1 to dataHeader.numSurfaces do
+    (
+      for j = 1 to (dataSurfaces[i].numCorners / 3) do
+      (
+        meshMids[f] = i
+        f += 1
+      )
+    )
 
+    -- create face from data arrays
     myMesh = Mesh \
              name:        nnkName \
-             vertices:    dataLookup.pos \
-             faces:       VertFaces \             
-             materialIDs: MatiFaces    
-			 
-    -- Set the texture verts and faces
-    setNumTVerts myMesh dataLookup.txc.count 
-    for i = 1 to dataLookup.txc.count do setTVert myMesh i dataLookup.txc[i]
+             vertices:    meshVert \
+             faces:       meshFace \
+             materialIDs: meshMids \
+             tverts:      meshTexc
+
+    -- set normals for vertices
+    for i = 1 to dataHeader.numCorners do (
+      corner = dataCorners[i]
+      format "%: %\n" i corner
+      setNormal myMesh i (FlipUp dataLookup.nrm[dataCorners[i].nrm])    
+    )  
+
+    -- build texture faces to match regular faces (tvface == face)
     buildTVFaces myMesh
-    for i = 1 to TexcFaces.count do setTVFace myMesh i TexcFaces[i]
-
-    update myMesh    
-
-    local tools = (TopoTools      \
-      triObj:myMesh               \
-      faceCornerNormals:NrmlFaces \
-      faceCornerVerts:VertFaces
-    )
-
-    --assignSmoothingGroupsFromVertexNormals myMesh NrmlFaces VertFaces
-    --tools.DumpStuff obj
-    tools.RebuildSmoothing()
-
-    update myMesh
+    for i = 1 to dataHeader.numFaces do
+      setTVFace myMesh i meshFace[i]
 
     -- and miscellaneous stuff
     myMesh.wirecolor = (color 0 0 153)
     if (chk_SeeThru.checked) do
       myMesh[sm].xray = true
-
-    return myMesh
   )
-  
+
+
   fn MakeTexture n = (
     local t = StandardMaterial \
               name:           n \
@@ -641,8 +632,9 @@ rollout SNOImport "SNO Import"
     return t
   )
 
+
   fn MakeMaterial = (
-	local i
+    local i, j
 
     if (chk_Debug.checked) do
       format "debug: creating material...\n"
@@ -654,12 +646,12 @@ rollout SNOImport "SNO Import"
       for i = 1 to dataHeader.numSurfaces do
       (
         myMat.names[i] = dataSurfaces[i].textureName
-        myMat.materialList[i] = (MakeTexture dataSurfaces[i].textureName)
+        myMat.materialList[i] = MakeTexture dataSurfaces[i].textureName
       )
     )
     else
     (
-      myMat = (MakeTexture dataSurfaces[1].textureName)
+      myMat = makeTexture dataSurfaces[1].textureName
     )
 
     -- add material to first slot in material editor
@@ -671,7 +663,6 @@ rollout SNOImport "SNO Import"
 
 
   fn ImportSNO fin = (
-
     if (chk_Debug.checked) do
       format "debug: importing sno...\n"
 
@@ -679,7 +670,8 @@ rollout SNOImport "SNO Import"
       return false
 
     MakeMesh()
-    
+    --MakeDoors()
+
     if (chk_Texture.checked and dataHeader.numSurfaces > 0) do (
       format "Will look for bitmaps in your output path: %\n" (dsGetOutputPath())
         MakeMaterial()
@@ -692,8 +684,7 @@ rollout SNOImport "SNO Import"
     addmodifier myMesh (SNOModDef())    
     local newmod = (myMesh.'Siege Max SNO')    
 
-    MakeDoors newmod
-
+    -- restoreDoors()
     -- restoreFloors()
 
     return true
@@ -744,11 +735,3 @@ fn lanceImportSNO =
 (
   addRollout SNOImport (newRolloutFloater "SNO Import" 200 205)
 )
-
-/*
-listener one-liners
-
-clearlistener(); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.door.ms"); lanceImportSNO(); setListenerSel #(0,0)
-
-$t_fh00_fieldpatch-08x08-01
-*/

@@ -100,8 +100,9 @@ fn RoundVector v m =
 )
 
 ----------------------------------------------------------------------------------------
-fn CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir = 
+fn CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir ReportLoopyDoors:false = 
 (
+
 	if ( forceDir != 7 ) then
 	(
 		case forceDir of
@@ -124,7 +125,9 @@ fn CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir =
 	
 	if ( length doorBase ) < 0.001 then
 	(
-		MessageBox "This is a poor set of door edges, the first and last verts are too close together"
+		if (ReportLoopyDoors) then (
+			MessageBox "This is a poor set of door edges, the first and last verts are too close together"
+		)
 		return  [1, 0, 0]
 	)
 	
@@ -170,7 +173,7 @@ fn CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir =
 )
 
 ----------------------------------------------------------------------------------------
-fn CalcDoorVisualOutDir obj selDoor canFlipBackwardsDoor forceDir =
+fn CalcDoorVisualOutDir obj selDoor canFlipBackwardsDoor forceDir ReportLoopyDoors:false =
 (
 	local orthoDoorOut = CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir
 
@@ -195,7 +198,9 @@ fn CalcDoorVisualOutDir obj selDoor canFlipBackwardsDoor forceDir =
 	
 	if ( length doorBase ) < 0.0001 then
 	(
-		MessageBox "This is a poor set of door edges, the first and last verts are too close together"
+		if (ReportLoopyDoors) then (
+			MessageBox "This is a poor set of door edges, the first and last verts are too close together"
+		)		
 		return  [1, 0, 0]
 	)
 	
@@ -281,7 +286,7 @@ fn ExtractDoorFromSelectedEdges obj newDoor = (
 )
 
 ----------------------------------------------------------------------------------------
-fn ExtractDoorFromEdgeList obj edgeList newDoor = (
+fn ExtractDoorFromEdgeList obj edgeList newDoor AllowLoopyDoors:false = (
 
 	newDoor.verts = #()
 	newDoor.edges = #()
@@ -431,22 +436,31 @@ fn ExtractDoorFromEdgeList obj edgeList newDoor = (
 		append newDoor.verts last_vert
 	)	
 
+
 	if newDoor.verts[1] == newDoor.verts[newDoor.verts.count] then
 	(
-		MessageBox "Error: Door edges form a closed loop"
-		return false
+		if (AllowLoopyDoors) then (
+			format "Warning: Door edges form a closed loop"
+		)
+		else (
+			MessageBox "Error: Door edges form a closed loop"
+			return false				
+		)			
 	)
-	
-	
 	local pointA = getvert obj newDoor.verts[1]
 	local pointB = getvert obj newDoor.verts[newDoor.verts.count]
 	local doorBase = pointB - pointA
 	
 	if (length doorBase) < 0.001 then
 	(
-		MessageBox "Error: Door edges share same first/last vert"
-		return false
-	)			
+		if (AllowLoopyDoors) then (
+			format "Warning: The first and last verts are too close together"
+		)
+		else (
+			MessageBox "Error: The first and last verts are too close together"
+			return false				
+		)
+	)				
 	
 	for v in newDoor.verts do
 	(		
