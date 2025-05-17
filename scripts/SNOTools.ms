@@ -240,7 +240,48 @@ fn CalcDoorVisualOutDir obj selDoor canFlipBackwardsDoor forceDir =
 )
 
 ----------------------------------------------------------------------------------------
+fn BuildDoorDirections node snoMod = (
+	local oldDoorDirs = snoMod.DoorDirectionList
+	local hasChanged = false
+
+	snoMod.DoorEdgeList = #()
+	snoMod.DoorLastEdges = #()
+	
+	snoMod.DoorVertList = #()
+	snoMod.DoorLastVerts = #()
+	
+	snoMod.DoorDirectionList = #()
+	snoMod.DoorDirectionListAcclimated = #()
+
+	for i = 1 to snoMod.tDoorList.count do 
+	(	
+		for nde in snoMod.tDoorList[i].edges do append snoMod.DoorEdgeList nde
+		append snoMod.DoorLastEdges (snoMod.DoorEdgeList.count)
+		
+		for ndv in snoMod.tDoorList[i].verts do append snoMod.DoorVertList ndv
+		append snoMod.DoorLastVerts (snoMod.DoorVertList.count)
+		
+		outDir = CalcDoorOutDir node snoMod.tDoorList[i] false snoMod.DoorForcedDir[i]
+		append snoMod.DoorDirectionList (Normalize outDir)
+		
+		outDirAcclimated = CalcDoorVisualOutDir node snoMod.tDoorList[i] false snoMod.DoorForcedDir[i]
+		append snoMod.DoorDirectionListAcclimated (Normalize outDirAcclimated)
+		
+		if ( snoMod.DoorDirectionList[i] != oldDoorDirs[i] ) then (
+			hasChanged = true
+		)
+	)
+
+	return hasChanged
+)
+
+----------------------------------------------------------------------------------------
 fn ExtractDoorFromSelectedEdges obj newDoor = (
+	return ExtractDoorFromEdgeList obj (obj.selectededges as array) newDoor
+)
+
+----------------------------------------------------------------------------------------
+fn ExtractDoorFromEdgeList obj edgeList newDoor = (
 
 	newDoor.verts = #()
 	newDoor.edges = #()
@@ -257,7 +298,7 @@ fn ExtractDoorFromSelectedEdges obj newDoor = (
 	local edge_bits = #{}
 	
 	local dupes_v = #()	
-	for e in obj.selectededges do
+	for e in edgeList do
 	(
 		arry = ((meshop.getvertsusingedge obj e) as array)
 		np =  point2 arry[1] arry[2]
@@ -266,7 +307,7 @@ fn ExtractDoorFromSelectedEdges obj newDoor = (
 			append dupes_v np
 			append low_v arry[1]
 			append high_v arry[2]
-			append edge_bits e.index
+			append edge_bits e
 		)
 	)
 	
@@ -497,7 +538,9 @@ rollout fltrSNODoors "Siege Node Doors"
 			SafeSetSubObjectLevel 2
 		)
 		else
-		(
+		(
+
+
 			-- Leave sel face mode
 			SafeSetSubObjectLevel 0
 		)
@@ -529,35 +572,7 @@ rollout fltrSNODoors "Siege Node Doors"
 	
 	fn RebuildDoorTables node reselect = 
 	(
-		local oldDoorDirs = node.'Siege Max SNO'.DoorDirectionList
-		local hasChanged = false
-
-		node.'Siege Max SNO'.DoorEdgeList = #()
-		node.'Siege Max SNO'.DoorLastEdges = #()
-		
-		node.'Siege Max SNO'.DoorVertList = #()
-		node.'Siege Max SNO'.DoorLastVerts = #()
-		
-		node.'Siege Max SNO'.DoorDirectionList = #()
-		node.'Siege Max SNO'.DoorDirectionListAcclimated = #()
-
-		for i = 1 to node.'Siege Max SNO'.tDoorList.count do 
-		(	
-			for nde in node.'Siege Max SNO'.tDoorList[i].edges do append node.'Siege Max SNO'.DoorEdgeList nde
-			append node.'Siege Max SNO'.DoorLastEdges (node.'Siege Max SNO'.DoorEdgeList.count)
-			
-			for ndv in node.'Siege Max SNO'.tDoorList[i].verts do append node.'Siege Max SNO'.DoorVertList ndv
-			append node.'Siege Max SNO'.DoorLastVerts (node.'Siege Max SNO'.DoorVertList.count)
-			
-			outDir = CalcDoorOutDir node node.'Siege Max SNO'.tDoorList[i] false node.'Siege Max SNO'.DoorForcedDir[i]
-			append node.'Siege Max SNO'.DoorDirectionList (Normalize outDir)
-			
-			outDirAcclimated = CalcDoorVisualOutDir node node.'Siege Max SNO'.tDoorList[i] false node.'Siege Max SNO'.DoorForcedDir[i]
-			append node.'Siege Max SNO'.DoorDirectionListAcclimated (Normalize outDirAcclimated)
-			
-			if ( node.'Siege Max SNO'.DoorDirectionList[i] != oldDoorDirs[i] ) then
-				hasChanged = true
-		)
+		local hasChanged = BuildDoorDirections node node.'Siege Max SNO'
 		
 		newlbl = "Num Doors: " + (node.'Siege Max SNO'.tDoorList.count as string)
 		lblNumDoors.text = newlbl
@@ -586,7 +601,9 @@ rollout fltrSNODoors "Siege Node Doors"
 			lblSelDoor.text = "Selected Door: " + (sldSelDoor.value as string)
 			sldSelDoor.ticks =  node.'Siege Max SNO'.tDoorList.count
 		)
-		else
+		else
+
+
 		(
 			btnAddDoor.text = "Append New Door #1"
 			btnInsertDoor.text = "Insert New Door #1"
@@ -680,7 +697,8 @@ rollout fltrSNODoors "Siege Node Doors"
 			CalcDoorOutDir $ newDoor true 7
 			CalcDoorVisualOutDir $ newDoor true 7
 			
-			if not (DoorAlreadyExists $ newDoor) then			(			
+			if not (DoorAlreadyExists $ newDoor) then
+			(			
 				if ($.'Siege Max SNO'.tDoorList == undefined) or ($.'Siege Max SNO'.tDoorList.count == 0) then
 				(
 					$.'Siege Max SNO'.tDoorList = #(newDoor)
@@ -797,7 +815,8 @@ rollout fltrSNODoors "Siege Node Doors"
 			else
 				radForceDoorDir.state = 7
 
-			SetSelectDoorEdges()	
+			SetSelectDoorEdges()
+	
 			--completeRedraw()
 		)
 	)
@@ -1096,7 +1115,8 @@ rollout fltrSNOTools "Siege Node Tools"
 	checkbutton ckbNoRound "nrd" pos:[179,24] width:26 height:24
 	
 	label lblNumSelected "        " 
-	
+	
+
 	button btnAddSel "Add Selected"
 	button btnDelSel "Remove Selected"
 	button btnClearAll "Remove All"
@@ -1206,14 +1226,16 @@ rollout fltrSNOTools "Siege Node Tools"
 	fn GetMeshFaceList =
 	(
 		if      (ckbFloor.checked)   then return $.'Siege Max SNO'.FloorFaceList	
-		else if (ckbWater.checked)   then return $.'Siege Max SNO'.WaterFaceList
+		else if (ckbWater.checked)   then return $.'Siege Max SNO'.WaterFaceList
+
 		else if (ckbIgnored.checked) then return $.'Siege Max SNO'.IgnoredFaceList
 		else if (ckbLocked.checked)  then return $.'Siege Max SNO'.LockedNormVertList
 		else if (ckbNoRound.checked) then return $.'Siege Max SNO'.DoNotRoundVertList
 		else return #()
 	)
 
-	fn SetMeshList flist =
+	fn SetMeshList flist =
+
 	(
 		if flist == undefined then (messagebox "undefined bits")
 		if      (ckbFloor.checked)   then $.'Siege Max SNO'.FloorFaceList = flist	
@@ -1305,12 +1327,14 @@ rollout fltrSNOTools "Siege Node Tools"
 	(
 		if not lblNumSelected.enabled then SetEnabled true
 		
-		gSiegeNodeRenderMode = undefined
+		gSiegeNodeRenderMode = undefined
+
 		oldstate = ckbFloor.checked or ckbIgnored.checked or ckbLocked.checked or ckbNoRound.checked
 		if oldstate then
 		(
 			ckbFloor.checked = false
-			ckbIgnored.checked = false
+			ckbIgnored.checked = false
+
 			ckbLocked.checked = false
 			ckbNoRound.checked = false
 		)
@@ -1577,7 +1601,8 @@ fn DisplaySiegeNodeData =
 		local widthscale = 0
 		local doordelta = [0,0,0]
 		local numsegs = 0
-				
+				
+
 		for i = 1 to sno.DoorLastVerts.count do in coordsys world
 		(
 			vmin = vmax+1

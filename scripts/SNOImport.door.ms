@@ -516,15 +516,29 @@ rollout SNOImport "SNO Import"
         p = dataCorners[door.verts[j]+1].pos
         doorVertSet[p] = true
       ) 
-      format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
-      format "                    $.selectedverts = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen() -- <<<< YAY!\n" doorVertSet
       local doorEdges = selectDoorEdgesForVerts myMesh doorVertSet
-      format "        and these edges %\n" doorEdges
-      format "                    $.selectededges = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen() -- <<<< YAY!\n" doorEdges
-      
-      newdoor = SiegeDoor verts:(doorVertSet as array) edges:doorEdges
-      append snomod.tDoorList newdoor
+
+      if (chk_Debug.checked) do (      
+        format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
+        format "$.selectedverts = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen()\n" doorVertSet      
+        format "and these edges %\n" doorEdges
+        format "$.selectededges = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen()\n" doorEdges
+      )  
+
+      local newDoor = SiegeDoor verts:#() edges:#()
+
+      if not (ExtractDoorFromEdgeList myMesh doorEdges newDoor) then (
+        format "Door #% could not be extracted correctly\n" d
+      ) else (
+        format "Door #% was extracted: %\n" d newDoor
+      )
+
+      append snomod.tDoorList newDoor
+
     )
+
+    BuildDoorDirections myMesh snomod
+
   )
 
   fn MakeMesh = (
@@ -678,8 +692,8 @@ rollout SNOImport "SNO Import"
     addmodifier myMesh (SNOModDef())    
     local newmod = (myMesh.'Siege Max SNO')    
 
-    MakeDoors(newmod)
-    -- restoreDoors()
+    MakeDoors newmod
+
     -- restoreFloors()
 
     return true
@@ -734,7 +748,7 @@ fn lanceImportSNO =
 /*
 listener one-liners
 
-clearlistener(); filein ((GetDir #scripts) +"\\SNOImport.tidy.ms"); lanceImportSNO(); setListenerSel #(0,0)
+clearlistener(); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.door.ms"); lanceImportSNO(); setListenerSel #(0,0)
 
 $t_fh00_fieldpatch-08x08-01
 */
