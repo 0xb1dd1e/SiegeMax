@@ -477,14 +477,16 @@ rollout SNOImport "SNO Import"
       for f = 1 to getNumFaces obj do
       (
         local ff = getFace obj f
-        local faceEdges = #(#{ff.x, ff.y}, #{ff.y, ff.z}, #{ff.x, ff.z})
+        local faceEdges = #((if ff.x < ff.y then #{ff.x, ff.y} else #{ff.y, ff.x}),
+                            (if ff.y < ff.z then #{ff.y, ff.z} else #{ff.z, ff.y}),
+                            (if ff.z < ff.x then #{ff.z, ff.x} else #{ff.x, ff.z}))
         for ee in 1 to 3 do
         (
           if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
             local key = (faceEdges[ee] as string) as name
             if (findItem edgeMap key) == 0 then (
-              format "We have an edge: %\n" faceEdges[ee]            
-              local edgeIndex = (f * 3) + ee
+              format "We have an edge on face % v % (%)\n" f ee faceEdges[ee]            
+              local edgeIndex = 3 * (f-1) + ee
               append edgeList edgeIndex
               append edgeMap key
             ) 
@@ -501,10 +503,11 @@ rollout SNOImport "SNO Import"
   fn MakeDoors snomod = (
     local i, j
 
-    if (chk_Debug.checked) do
+    if (chk_Debug.checked) do (
       format "debug: creating doors...\n"
+    )
 
-    myDoor = #()
+    snomod.tDoorList = #()    
     for d = 1 to dataHeader.numDoors do
     (
       local door = dataDoors[d]
@@ -514,9 +517,13 @@ rollout SNOImport "SNO Import"
         doorVertSet[p] = true
       ) 
       format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
-      format "$.selectedverts = % -- <<<< YAY!\n" doorVertSet
-      local yerEdges = selectDoorEdgesForVerts myMesh doorVertSet
-      format "        and these edges %\n" yerEdges
+      format "                    $.selectedverts = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen() -- <<<< YAY!\n" doorVertSet
+      local doorEdges = selectDoorEdgesForVerts myMesh doorVertSet
+      format "        and these edges %\n" doorEdges
+      format "                    $.selectededges = % ; gw.enlargeUpdateRect #whole ; gw.updateScreen() -- <<<< YAY!\n" doorEdges
+      
+      newdoor = SiegeDoor verts:(doorVertSet as array) edges:doorEdges
+      append snomod.tDoorList newdoor
     )
   )
 
@@ -540,16 +547,16 @@ rollout SNOImport "SNO Import"
 
     for surface in dataSurfaces do (
       for j = 1 to (surface.numCorners / 3) do (
-        local cX = dataCorners[surface.faces[j].x + surface.startCorner + 1]
-        local cY = dataCorners[surface.faces[j].y + surface.startCorner + 1]
-        local cZ = dataCorners[surface.faces[j].z + surface.startCorner + 1]	
-        VertFaces[f] = [cX.pos, cY.pos, cZ.pos]
-        TexcFaces[f] = [cX.txc, cY.txc, cZ.txc]
-        NrmlFaces[f] = [cX.nrm, cY.nrm, cZ.nrm]
+        local cA = dataCorners[surface.faces[j].x + surface.startCorner + 1]
+        local cB = dataCorners[surface.faces[j].y + surface.startCorner + 1]
+        local cC = dataCorners[surface.faces[j].z + surface.startCorner + 1]	
+        VertFaces[f] = [cA.pos, cB.pos, cC.pos]
+        TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
+        NrmlFaces[f] = [cA.nrm, cB.nrm, cC.nrm]
         MatiFaces[f] = s        
         f += 1
       )
-	  s += 1
+	    s += 1
     )
 
     format "We are expecting % faces\n" VertFaces.count
