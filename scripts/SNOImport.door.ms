@@ -77,8 +77,7 @@ rollout SNOImport "SNO Import"
   )
 
   fn Quantize v tol = (
-    s = (v * tol) + 0.5
-    s = if s < 0 then ceil(s) else floor(s)
+    s = if v < 0 then ceil( (v * tol) - 0.5) else floor( (v * tol) + 0.5)
     return s / tol
   )
 
@@ -185,8 +184,9 @@ rollout SNOImport "SNO Import"
     local m = ReadPosThenRot fin
     local n = ReadLong fin
     local h = #()
-    for i = 1 to n do
+    for i = 1 to n do (
       append h (ReadLong fin)
+    )
 
     return (strDoor index:d xform:m numVerts:n verts:h)
   )
@@ -465,8 +465,38 @@ rollout SNOImport "SNO Import"
     )
     
       return true
-  )
+  )  
 
+  fn selectDoorEdgesForVerts obj doorVertSet =
+  (
+      local edgeList = #()
+      local edgeMap = #() -- prevent duplicates
+
+      format "Look for edges in % (%)\n" doorVertSet doorVertSet.numberset
+      -- Build a list of all edges from faces
+      for f = 1 to getNumFaces obj do
+      (
+        local ff = getFace obj f
+        local faceEdges = #(#{ff.x, ff.y}, #{ff.y, ff.z}, #{ff.x, ff.z})
+        for ee in 1 to 3 do
+        (
+          if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
+            local key = (faceEdges[ee] as string) as name
+            if (findItem edgeMap key) == 0 then (
+              format "We have an edge: %\n" faceEdges[ee]            
+              local edgeIndex = (f * 3) + ee
+              append edgeList edgeIndex
+              append edgeMap key
+            ) 
+            else (
+              format "We have a DUPE!! %\n" faceEdges[ee]            
+            )
+          )
+        )
+      )
+  
+      return edgeList
+  )   
 
   fn MakeDoors snomod = (
     local i, j
@@ -475,12 +505,18 @@ rollout SNOImport "SNO Import"
       format "debug: creating doors...\n"
 
     myDoor = #()
-    for i = 1 to dataHeader.numDoors do
+    for d = 1 to dataHeader.numDoors do
     (
-      local doorVert = #()
-      local doorTexc = #()
-      doorIV = for j = 1 to dataDoors[i].numVerts collect dataDoors[i].verts[j]
-      format "Door #% has these verts %\n" i doorIV
+      local door = dataDoors[d]
+      local doorVertSet = #{}
+      for j = 1 to door.numVerts do (
+        p = dataCorners[door.verts[j]+1].pos
+        doorVertSet[p] = true
+      ) 
+      format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
+      format "$.selectedverts = % -- <<<< YAY!\n" doorVertSet
+      local yerEdges = selectDoorEdgesForVerts myMesh doorVertSet
+      format "        and these edges %\n" yerEdges
     )
   )
 
@@ -549,6 +585,7 @@ rollout SNOImport "SNO Import"
     if (chk_SeeThru.checked) do
       myMesh[sm].xray = true
 
+    return myMesh
   )
   
   fn MakeTexture n = (
