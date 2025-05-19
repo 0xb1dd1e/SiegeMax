@@ -479,34 +479,6 @@ rollout SNOImport "SNO Import"
       return true
   )  
 
-  fn selectDoorEdgesForVerts obj doorVertSet =
-  (
-      local edgeList = #()
-      local edgeMap = #() -- prevent duplicates
-
-      -- Build a list of all edges from faces
-      for f = 1 to getNumFaces obj do
-      (
-        local ff = getFace obj f
-        local faceEdges = #((if ff.x < ff.y then #{ff.x, ff.y} else #{ff.y, ff.x}),
-                            (if ff.y < ff.z then #{ff.y, ff.z} else #{ff.z, ff.y}),
-                            (if ff.z < ff.x then #{ff.z, ff.x} else #{ff.x, ff.z}))
-        for ee in 1 to 3 do
-        (
-          if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
-            local key = (faceEdges[ee] as string) as name
-            if (findItem edgeMap key) == 0 then (       
-              local edgeIndex = 3 * (f-1) + ee
-              append edgeList edgeIndex
-              append edgeMap key
-            ) 
-          )
-        )
-      )
-  
-      return edgeList
-  )   
-
   fn MakeDoors snomod = (
     local i, j
 
@@ -523,7 +495,7 @@ rollout SNOImport "SNO Import"
         p = dataCorners[door.verts[j]+1].pos
         doorVertSet[p] = true
       ) 
-      local doorEdges = selectDoorEdgesForVerts myMesh doorVertSet
+      local doorEdges = snomod.collectDoorEdgesForVerts myMesh doorVertSet
 
       if (chk_Debug.checked) do (      
         format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset

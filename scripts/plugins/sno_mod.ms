@@ -55,10 +55,39 @@ category:"Siege Max"
 		on RestoreDoorVerts pressed do ( this.RestoreDoorVertMapping this )		
 	)
 
+	fn collectDoorEdgesForVerts obj doorVertSet =
+	(
+		local edgeList = #()
+		local edgeMap = #() -- prevent duplicates
+
+		-- Build a list of all edges from faces
+		for f = 1 to getNumFaces obj do
+		(
+			local ff = getFace obj f
+			local faceEdges = #((if ff.x < ff.y then #{ff.x, ff.y} else #{ff.y, ff.x}),
+								(if ff.y < ff.z then #{ff.y, ff.z} else #{ff.z, ff.y}),
+								(if ff.z < ff.x then #{ff.z, ff.x} else #{ff.x, ff.z}))
+			for ee in 1 to 3 do
+			(
+			if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
+				local key = (faceEdges[ee] as string) as name
+				if (findItem edgeMap key) == 0 then (       
+				local edgeIndex = 3 * (f-1) + ee
+				append edgeList edgeIndex
+				append edgeMap key
+				) 
+			)
+			)
+		)
+	
+		return edgeList
+	)   
+
 	fn SaveDoorVertMapping snoMod = (
 		-- Store the information that tells us which verts make up
-		-- each door in the #tDoorChannel mapping channel so that
-		-- we can recover the information after a topology change
+		-- each door in the #tDoorChannel mapping channel.
+		-- We can recover the information and reconstruct the doors
+		-- after a topology change.
 
 		format "UpdateDoorVertMapping!\n"
 		local snoMesh = (refs.dependents snoMod)[1]
@@ -126,17 +155,50 @@ category:"Siege Max"
 		-- Store the information that tells us which verts make up
 		-- each door in the #tDoorChannel mapping channel so that
 		-- we can recover the information after a topology change
+
 		local numFound = 0
 		format "RestoreDoorVertMapping!\n"
 		local snoMesh = (refs.dependents snoMod)[1]
+
+		local doorVerts = #()
 		for v = 1 to snoMesh.numVerts do (
 			local info = meshop.getMapVert snoMesh snoMod.tDoorChannel v
-			if (info.x != 0) then (
+			local d0 = info.x as integer			
+			local d1 = info.y as integer			
+			if (d0 != 0) then (
 				format "We need to restore % %\n" v info
 				numFound += 1
+				if doorVerts[d0] == undefined then (
+					doorVerts[d0] = #{v}
+				)
+				else (
+					doorVerts[d0][v] = true
+				)
+				if (d1 != 0) then (
+					if doorVerts[d1] == undefined then (
+						doorVerts[d1] = #{v}
+					)
+					else (
+						doorVerts[d1][v] = true
+					)
+				)
 			)
 		)
+		
 		format "Found info in % verts\n" numFound
+
+		local edges = #()
+		for d = 1 to doorVerts.count do (
+			doorVertSet = doorVerts[d]
+			doorEdgeList = (collectDoorEdgesForVerts snoMesh doorVertSet)
+			format "% % %\n" d doorVertSet doorEdgeList
+			append edges doorEdgeList
+		)
+
+		-- Now we need to know if this really is a 
+		--snoMod.tVertList = doorVertSet as array
+		--snoMod.tEdgeList = edgelist		
+
 	)
 			
 	fn RebuildInternals =
