@@ -282,7 +282,8 @@ fn BuildDoorDirections node snoMod = (
 
 ----------------------------------------------------------------------------------------
 fn ExtractDoorFromSelectedEdges obj newDoor = (
-	return ExtractDoorFromEdgeList obj (obj.selectededges as array) newDoor
+	edgeList = for ei in obj.selectededges collect ei.index
+	return ExtractDoorFromEdgeList obj edgeList newDoor
 )
 
 ----------------------------------------------------------------------------------------

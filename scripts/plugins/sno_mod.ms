@@ -38,6 +38,8 @@ category:"Siege Max"
 	local tDoNotRoundBits = #{}
 	local tSelectedDoor = undefined
 
+	local tDoorChannel = 89
+
 	struct SiegeDoor (verts,edges)
 	
 	rollout ModActions "Siege Max SNO"
@@ -65,6 +67,10 @@ category:"Siege Max"
 		for b in this.DoNotRoundVertList do append tDoNotRoundBits b 
 		
 		this.tDoorList = #()
+		
+		snoMesh = (refs.dependentNodes this.modifier)[1]
+		-- make sure we are on an editable mesh
+		meshop.setNumMapVerts snoMesh tDoorChannel (snoMeshnumVerts)
 
 		for i = 1 to DoorLastEdges.count do
 		(
@@ -77,6 +83,15 @@ category:"Siege Max"
  			local dooredges = for e = emin to emax collect this.DoorEdgeList[e]
 			
 			append this.tDoorList (SiegeDoor doorverts dooredges)
+			
+			-- Encode the door verts into the vertex mapping channel
+			-- When we get a topology change message we _should_ be able to locate
+			-- where the have migrated to :fingers-crossed-emoji:
+			for dv in doorverts do (
+				format "Yer now about to map % %\n"  dv [i,vmin,vmax]
+				meshop.setMapVert snoMesh tDoorChannel dv (point3 i vmin vmax)
+			)
+
 		)
 	)
 

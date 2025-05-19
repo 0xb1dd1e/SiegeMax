@@ -826,9 +826,9 @@ fn lanceImportSNO =
 )
 
 /*
-listener one-liners
+listener one-liner to reload the WIP
 
-clearlistener(); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
+clearlistener(); filein ((GetDir #scripts) +"\\plugins\\sno_mod.ms"); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
 
 Known problems:
 Non-contiguous edges: $t_gi_gad_wal_nook-04-a
