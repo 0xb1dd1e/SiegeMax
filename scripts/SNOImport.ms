@@ -10,6 +10,7 @@
 --  5/11/2025 biddle - re-establish smoothing groups from incoming corner normals (maybe)
 --  5/11/2025 biddle - quantize the normals and uvees to avoid sliver triangles
 --  5/17/2025 biddle - recreate simple doors
+--  5/17/2025 biddle - search for DDS textures
 --
 -------------------------------------------------------------------------------------------
 
@@ -210,9 +211,9 @@ rollout SNOImport "SNO Import"
       )
   ) 
   
-  fn fetchIndex itms val = (
+  fn fetchIndex itms val addIfMissing:true = (
     i = findItem itms val
-    if i == 0 then (
+    if i == 0 and addIfMissing then (
       append itms val
       i = itms.count
     )
@@ -330,11 +331,13 @@ rollout SNOImport "SNO Import"
 
   struct strTriNorm (
     verts,
-    faceNorm
+    faceNorm,
+    faceVerts,
+    face
   )
 
   fn ReadTriNorm fin = (
-    local n = strTriNorm()
+    local n = strTriNorm face:undefined
 
     n.verts = #()
     append n.verts (ReadVector fin)
@@ -342,6 +345,14 @@ rollout SNOImport "SNO Import"
     append n.verts (ReadVector fin)
 
     n.faceNorm = ReadVector fin
+
+    local A = fetchIndex dataLookup.pos n.verts[1] addIfMissing:false
+    local B = fetchIndex dataLookup.pos n.verts[2] addIfMissing:false
+    local C = fetchIndex dataLookup.pos n.verts[3] addIfMissing:false
+    
+    n.faceVerts = #{A,B,C}
+
+    -- Face will be set later from faceVerts, once the mesh is constructed
 
     return n
   )
@@ -473,7 +484,6 @@ rollout SNOImport "SNO Import"
       local edgeList = #()
       local edgeMap = #() -- prevent duplicates
 
-      format "Look for edges in % (%)\n" doorVertSet doorVertSet.numberset
       -- Build a list of all edges from faces
       for f = 1 to getNumFaces obj do
       (
@@ -485,15 +495,11 @@ rollout SNOImport "SNO Import"
         (
           if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
             local key = (faceEdges[ee] as string) as name
-            if (findItem edgeMap key) == 0 then (
-              format "We have an edge on face % v % (%)\n" f ee faceEdges[ee]            
+            if (findItem edgeMap key) == 0 then (       
               local edgeIndex = 3 * (f-1) + ee
               append edgeList edgeIndex
               append edgeMap key
             ) 
-            else (
-              format "We have a DUPE!! %\n" faceEdges[ee]            
-            )
           )
         )
       )
@@ -529,9 +535,7 @@ rollout SNOImport "SNO Import"
       local newDoor = SiegeDoor verts:#() edges:#()
 
       if not (ExtractDoorFromEdgeList myMesh doorEdges newDoor AllowLoopyDoors:true) then (
-        format "Door #% could not be extracted correctly\n" d
-      ) else (
-        format "Door #% was extracted: %\n" d newDoor
+        if (chk_Debug.checked) do format "Door #% could not be extracted correctly\n" d
       )
 
       append snomod.tDoorList newDoor
@@ -563,13 +567,45 @@ rollout SNOImport "SNO Import"
       )
 
       if (isFlipped) then (
-        format  "Flip door %\n" d
+        if (chk_Debug.checked) do format  "Flip door %\n" d
         FlipDoor myMesh snomod.tDoorList[d]
       )
 
     )  
     
 
+  )
+
+  fn MakeFloors obj snomod = (
+    
+    fn DecodeFlags flg = (
+      local HUMANOID_WALKABLE	= bit.shift 1 0
+      local IS_WALL						= bit.shift 1 29
+      local IS_FLOOR					= bit.shift 1 30
+      local IS_WATER					= bit.shift 1 31
+      fn bitset f b = return bit.and f b == b
+      out = #()
+      if (bitset flg HUMANOID_WALKABLE) do append out #HUMANOID_WALKABLE
+      if (bitset flg IS_WALL) do append out #IS_WALL
+      if (bitset flg IS_FLOOR) do append out #IS_FLOOR
+      if (bitset flg IS_WATER) do append out #IS_WATER
+      return out
+    )
+
+    for ln = 1 to dataLogicalNodes.count do (
+      lno = dataLogicalNodes[ln]
+      flags = (DecodeFlags lno.flags)
+      format "Logical node % flags: %\n" ln flags
+      if (findItem flags #IS_FLOOR) > 0 then (
+        format "Let's floor %\n" ln 
+        for tn = 1 to lno.numTriangles do (
+          trinorm = lno.triangles[tn]
+          -- Now we can figure out what face this trinorm was constructed from
+          trinorm.face = meshop.getFacesUsingVert obj trinorm.faceVerts
+          format "%: % -> %\n" tn trinorm.face trinorm.faceVerts     
+        )
+      )
+    )
   )
 
   fn MakeMesh = (
@@ -604,7 +640,7 @@ rollout SNOImport "SNO Import"
 	    s += 1
     )
 
-    format "We are expecting % faces\n" VertFaces.count
+    if (chk_Debug.checked) do format "We are expecting % faces\n" VertFaces.count
 
     myMesh = Mesh \
              name:        nnkName \
@@ -641,31 +677,47 @@ rollout SNOImport "SNO Import"
   )
   
   fn MakeTexture n = (
-    local t = StandardMaterial \
-              name:           n \
-              shaderByName:   "blinn" \
-              adTextureLock:  true \
-              adLock:         true \
-              showInViewport: true
-    t.diffuseMapEnable = true
-    t.opacityMapEnable = true
+
+    local t = StandardMaterial          \
+              name:             n       \
+              shaderByName:     "blinn" \
+              adTextureLock:    true    \
+              adLock:           true    \
+              showInViewport:   true    \
+              diffuseMapEnable: true    \
+              opacityMapEnable: true
 	
-    -- look for the bitmap in the output path.\	
-    rawpath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n) + ".raw"
+    -- look for the bitmap in the output path.
+
+    -- The original SiegeMax did not have DDS support, but you can
+    -- install the NetImmerse/Gamebryo gmax plugin that does have it.
+    -- https://www.moddb.com/addons/dds-and-nif-support-for-gmax
+
+    local extensions = #(".dds", ".raw", ".psd")
+    local basePath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n)
+    local texturepath = ""
     
-    if not (doesFileExist rawpath) then (
-      format "Missing: %\n" rawpath 
-      rawpath = n + ".raw"
-      -- TODO:
-      --   search other potential paths, or PSD files		
-    ) else (
-      format "Found: %\n" rawpath 
+    found = false
+    for ext in extensions do (
+      texturepath = basePath + ext
+      if (doesFileExist texturepath) then (
+        if (chk_Debug.checked) do format "Found: %\n" texturepath         
+        found = true
+        exit
+      )
     )
+    if not found then (
+      if (chk_Debug.checked) do format "Missing: %\n" rawpath 
+      texturepath = basePath
+    )
+
+    -- TODO:
+    --   search other potential paths		
     
     t.diffuseMap = BitmapTexture name:(n + "_diffuse") \
-                   filename:(rawpath)
+                   filename:(texturepath)
     t.opacityMap = BitmapTexture name:(n + "_opacity") \
-                   filename:(rawpath) \
+                   filename:(texturepath) \
                    monoOutput: 1 \
                    alphaSource: 0
 
@@ -675,8 +727,7 @@ rollout SNOImport "SNO Import"
   fn MakeMaterial = (
 	local i
 
-    if (chk_Debug.checked) do
-      format "debug: creating material...\n"
+    if (chk_Debug.checked) do format "debug: creating material...\n"
 
     -- create standard texture, or multi-material if needed
     if (dataHeader.numSurfaces > 1) then
@@ -700,11 +751,9 @@ rollout SNOImport "SNO Import"
     myMesh.material = myMat
   )
 
-
   fn ImportSNO fin = (
 
-    if (chk_Debug.checked) do
-      format "debug: importing sno...\n"
+    if (chk_Debug.checked) do format "debug: importing sno...\n"
 
     if not (ReadSNO fin) do
       return false
@@ -725,8 +774,8 @@ rollout SNOImport "SNO Import"
 
     MakeDoors newmod
 
-    -- restoreFloors()
-
+    MakeFloors myMesh newmod
+    
     return true
   )
 
@@ -779,7 +828,7 @@ fn lanceImportSNO =
 /*
 listener one-liners
 
-clearlistener(); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.door.ms"); lanceImportSNO(); setListenerSel #(0,0)
+clearlistener(); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
 
 Known problems:
 Non-contiguous edges: $t_gi_gad_wal_nook-04-a

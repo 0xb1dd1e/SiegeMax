@@ -664,12 +664,12 @@ rollout ASPImport "ASP Import"
     rawpath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n) + ".raw"
     
     if not (doesFileExist rawpath) then (
-      format "Missing: %\n" rawpath 
+      if (chk_Debug.checked) do format "Missing: %\n" rawpath 
       rawpath = n + ".raw"
       -- TODO:
       --   search other potential paths, or PSD files		
     ) else (
-      format "Found: %\n" rawpath 
+      if (chk_Debug.checked) do format "Found: %\n" rawpath 
     )
     
     t.diffuseMap = BitmapTexture name:(n + "_diffuse") \
@@ -685,8 +685,7 @@ rollout ASPImport "ASP Import"
 
   fn MakeMaterial =
   (
-    if (chk_Debug.checked) do
-      format "debug: creating textures...\n"
+    if (chk_Debug.checked) do format "debug: creating textures...\n"
 
     -- create standard texture, or multi-material if needed
     if (numTextures > 1) then
@@ -724,8 +723,7 @@ rollout ASPImport "ASP Import"
   (
     local i, j
 
-    if (chk_Debug.checked) do
-      format "debug: creating bones...\n"
+    if (chk_Debug.checked) do format "debug: creating bones...\n"
 
     -- build bones
     myBone = #()

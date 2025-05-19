@@ -23,9 +23,6 @@ fileIn (scriptdir+"/SNOImport.ms")
 fileIn (scriptdir+"/PRSImport.ms")
 fileIn (scriptdir+"/ASPImport.ms")
 
--- HACKITY-HACK-HACK TODO: biddle place this file in correct scriptdir 
-filein "X:\hackfun\SiegeRemax\biddled\SS1_SNOImporter.ms"
-
 ----------------------------------------------------
 MacroScript LaunchSNOImporter
 ButtonText:"SNO Import"
@@ -40,26 +37,6 @@ Tooltip:"Launch SNO Importer"
 		try
 		(
 			lanceImportSNO()
-		)
-		catch()	    
-		return true
-	)
-)
-
-----------------------------------------------------
-MacroScript LaunchSS1SNOImporter
-ButtonText:"SS1 SNO Import"
-Category:"Lance Import Tools" 
-Tooltip:"Launch SS1 SNO Importer" 
-(
-	On isVisible return true 
-	On isEnabled return true
-  
-	On execute Do  
-	(    
-		try
-		(
-			launchImportSS1SNO()
 		)
 		catch()	    
 		return true
