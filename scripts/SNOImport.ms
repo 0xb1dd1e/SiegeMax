@@ -662,8 +662,6 @@ rollout SNOImport "SNO Import"
       faceCornerVerts:VertFaces
     )
 
-    --assignSmoothingGroupsFromVertexNormals myMesh NrmlFaces VertFaces
-    --tools.DumpStuff obj
     tools.RebuildSmoothing()
 
     update myMesh
@@ -773,6 +771,8 @@ rollout SNOImport "SNO Import"
     local newmod = (myMesh.'Siege Max SNO')    
 
     MakeDoors newmod
+
+    newmod.SaveDoorVertMapping newmod
 
     MakeFloors myMesh newmod
     

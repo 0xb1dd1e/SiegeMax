@@ -38,7 +38,7 @@ category:"Siege Max"
 	local tDoNotRoundBits = #{}
 	local tSelectedDoor = undefined
 
-	local tDoorChannel = 89
+	local tDoorChannel = 10
 
 	struct SiegeDoor (verts,edges)
 	
@@ -47,8 +47,98 @@ category:"Siege Max"
 		button OpenSNOToolkit "Open SNO Tool Kit"
 		
 		on OpenSNOToolkit pressed do ( gSNOPopUp() )
+
+		button SaveDoorVerts "Save Door Verts"		
+		on SaveDoorVerts pressed do ( this.SaveDoorVertMapping this )		
+
+		button RestoreDoorVerts "Restore Door Verts"		
+		on RestoreDoorVerts pressed do ( this.RestoreDoorVertMapping this )		
 	)
-		
+
+	fn SaveDoorVertMapping snoMod = (
+		-- Store the information that tells us which verts make up
+		-- each door in the #tDoorChannel mapping channel so that
+		-- we can recover the information after a topology change
+
+		format "UpdateDoorVertMapping!\n"
+		local snoMesh = (refs.dependents snoMod)[1]
+
+		if (meshop.getNumMaps snoMesh) <= snoMod.tDoorChannel then (
+			meshop.setNumMaps snoMesh (snoMod.tDoorChannel+1) keep:true
+		)
+
+		if not (meshop.getMapSupport snoMesh snoMod.tDoorChannel) then (
+			meshop.setMapSupport snoMesh thsnoModis.tDoorChannel true		
+		)
+
+		meshop.setNumMapVerts snoMesh snoMod.tDoorChannel (snoMesh.numVerts)
+		for v = 1 to snoMesh.numVerts do (
+			meshop.setMapVert snoMesh snoMod.tDoorChannel v (point3 0 0 0)
+		)
+
+		local numStored = 0
+
+		for d = 1 to snoMod.tDoorList.count do
+		(	
+			format "door %\n" d
+			local snoDoor = snoMod.tDoorList[d]		
+			for v = 1 to snoDoor.verts.count do (
+
+				local dv = snoDoor.verts[v]
+
+				local flags = 0				
+				if v == 1 then flags += 1 -- first vert of door
+				if v == snoDoor.verts.count then flags += 2 -- last vert of door
+
+				local info = meshop.getMapVert snoMesh snoMod.tDoorChannel dv
+				if info.x == 0 then (
+					-- This the first time we've seen this vert
+					info.x = d
+					info.y = 0
+					info.z = flags
+					numStored += 1
+				)
+				else (
+					-- This the second time we've seen this vert
+					if (info.x == d) then (
+						format "loopy door detected %\n" d
+						info.y = 0						
+						info.z = bit.or (info.z as integer) flags						
+					)
+					else (
+						-- we have started a new door
+						if (info.y != 0) then (
+							format "borked door detected % %\n" d info.y
+						)
+						info.y = d
+						info.z = bit.or (info.z as integer) (bit.shift 2 flags)
+					)					
+				)
+				format "    info % %\n" dv info 
+				meshop.setMapVert snoMesh snoMod.tDoorChannel dv info
+			)
+		)
+
+		format "Store info into % verts\n" numStored
+	)
+
+	fn RestoreDoorVertMapping snoMod = (
+		-- Store the information that tells us which verts make up
+		-- each door in the #tDoorChannel mapping channel so that
+		-- we can recover the information after a topology change
+		local numFound = 0
+		format "RestoreDoorVertMapping!\n"
+		local snoMesh = (refs.dependents snoMod)[1]
+		for v = 1 to snoMesh.numVerts do (
+			local info = meshop.getMapVert snoMesh snoMod.tDoorChannel v
+			if (info.x != 0) then (
+				format "We need to restore % %\n" v info
+				numFound += 1
+			)
+		)
+		format "Found info in % verts\n" numFound
+	)
+			
 	fn RebuildInternals =
 	(
 		this.tFloorBits = #{}
@@ -67,10 +157,6 @@ category:"Siege Max"
 		for b in this.DoNotRoundVertList do append tDoNotRoundBits b 
 		
 		this.tDoorList = #()
-		
-		snoMesh = (refs.dependentNodes this.modifier)[1]
-		-- make sure we are on an editable mesh
-		meshop.setNumMapVerts snoMesh tDoorChannel (snoMeshnumVerts)
 
 		for i = 1 to DoorLastEdges.count do
 		(
@@ -83,15 +169,6 @@ category:"Siege Max"
  			local dooredges = for e = emin to emax collect this.DoorEdgeList[e]
 			
 			append this.tDoorList (SiegeDoor doorverts dooredges)
-			
-			-- Encode the door verts into the vertex mapping channel
-			-- When we get a topology change message we _should_ be able to locate
-			-- where the have migrated to :fingers-crossed-emoji:
-			for dv in doorverts do (
-				format "Yer now about to map % %\n"  dv [i,vmin,vmax]
-				meshop.setMapVert snoMesh tDoorChannel dv (point3 i vmin vmax)
-			)
-
 		)
 	)
 
