@@ -99,11 +99,15 @@ category:"Siege Max"
 		if not (meshop.getMapSupport snoMesh snoMod.tDoorChannel) then (
 			meshop.setMapSupport snoMesh thsnoModis.tDoorChannel true		
 		)
-
-		meshop.setNumMapVerts snoMesh snoMod.tDoorChannel (snoMesh.numVerts)
+		
 		for v = 1 to snoMesh.numVerts do (
 			meshop.setMapVert snoMesh snoMod.tDoorChannel v (point3 0 0 0)
 		)
+
+		meshop.setNumMapVerts snoMesh snoMod.tDoorChannel (snoMesh.numVerts)
+		for f = 1 to (meshop.getnumFaces snoMesh) do (
+			meshop.setMapFace snoMesh snoMod.tDoorChannel f (meshop.getMapFace snoMesh 0 f)			
+		) 	
 
 		local numStored = 0
 
@@ -187,17 +191,16 @@ category:"Siege Max"
 		
 		format "Found info in % verts\n" numFound
 
-		local edges = #()
 		for d = 1 to doorVerts.count do (
 			doorVertSet = doorVerts[d]
 			doorEdgeList = (collectDoorEdgesForVerts snoMesh doorVertSet)
-			format "% % %\n" d doorVertSet doorEdgeList
-			append edges doorEdgeList
+			format "restoring % % %\n" d doorVertSet doorEdgeList
+			-- Now we need to know if this really is a 
+			-- TODO perhaps a little validation here...
+			snoMod.tDoorList[d].verts = doorVertSet as array
+			snoMod.tDoorList[d].edges = doorEdgeList
 		)
 
-		-- Now we need to know if this really is a 
-		--snoMod.tVertList = doorVertSet as array
-		--snoMod.tEdgeList = edgelist		
 
 	)
 			
