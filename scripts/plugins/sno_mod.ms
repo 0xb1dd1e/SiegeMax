@@ -38,7 +38,16 @@ category:"Siege Max"
 	local tDoNotRoundBits = #{}
 	local tSelectedDoor = undefined
 
-	local tDoorChannel = 10
+	-- VData channels used to preserve the per-vert door information
+	-- If this gets too bloated with all the data on verts then I
+	-- might have to try and do this with vertmaps (again)
+	local tDoorPNum = 11
+	local tDoorPSeq = 12
+	local tDoorQNum = 13
+	local tDoorQSeq = 14
+	local tDoorPosX = 15
+	local tDoorPosY = 16
+	local tDoorPosZ = 17
 
 	struct SiegeDoor (verts,edges)
 	
@@ -92,22 +101,42 @@ category:"Siege Max"
 		format "UpdateDoorVertMapping!\n"
 		local snoMesh = (refs.dependents snoMod)[1]
 
-		if (meshop.getNumMaps snoMesh) <= snoMod.tDoorChannel then (
-			meshop.setNumMaps snoMesh (snoMod.tDoorChannel+1) keep:true
+		if (meshop.getNumVDataChannels snoMesh) <= snoMod.tDoorPosZ then (
+			meshop.setNumVDataChannels snoMesh (snoMod.tDoorPosZ+1) keep:true
 		)
 
-		if not (meshop.getMapSupport snoMesh snoMod.tDoorChannel) then (
-			meshop.setMapSupport snoMesh thsnoModis.tDoorChannel true		
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorPNum) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorPNum true		
+		)
+
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorPSeq) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorPSeq true		
+		)
+
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorQNum) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorQNum true		
+		)
+
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorQSeq) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorQSeq true		
+		)
+
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorPosX) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorPosX true		
+		)
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorPosY) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorPosY true		
+		)
+		if not (meshop.getVDataChannelSupport snoMesh snoMod.tDoorPosZ) then (
+			meshop.setVDataChannelSupport snoMesh snoMod.tDoorPosZ true		
 		)
 		
 		for v = 1 to snoMesh.numVerts do (
-			meshop.setMapVert snoMesh snoMod.tDoorChannel v (point3 0 0 0)
+			meshop.setVDataValue snoMesh snoMod.tDoorPNum v 0
+			meshop.setVDataValue snoMesh snoMod.tDoorPSeq v 0
+			meshop.setVDataValue snoMesh snoMod.tDoorQNum v 0
+			meshop.setVDataValue snoMesh snoMod.tDoorQSeq v 0
 		)
-
-		meshop.setNumMapVerts snoMesh snoMod.tDoorChannel (snoMesh.numVerts)
-		for f = 1 to (meshop.getnumFaces snoMesh) do (
-			meshop.setMapFace snoMesh snoMod.tDoorChannel f (meshop.getMapFace snoMesh 0 f)			
-		) 	
 
 		local numStored = 0
 
@@ -119,36 +148,52 @@ category:"Siege Max"
 
 				local dv = snoDoor.verts[v]
 
-				local flags = 0				
-				if v == 1 then flags += 1 -- first vert of door
-				if v == snoDoor.verts.count then flags += 2 -- last vert of door
-
-				local info = meshop.getMapVert snoMesh snoMod.tDoorChannel dv
-				if info.x == 0 then (
+				local dPn = (meshop.getVDataValue snoMesh snoMod.tDoorPNum dv) as integer
+				local dPs = (meshop.getVDataValue snoMesh snoMod.tDoorPSeq dv) as integer
+				local dQn = (meshop.getVDataValue snoMesh snoMod.tDoorQNum dv) as integer
+				local dQs = (meshop.getVDataValue snoMesh snoMod.tDoorQSeq dv) as integer	
+				
+				local info = #()
+				if dPn == 0 then (
 					-- This the first time we've seen this vert
-					info.x = d
-					info.y = 0
-					info.z = flags
+					dPn = d
+					dPs = v
+					meshop.setVDataValue snoMesh snoMod.tDoorPNum dv dPn
+					meshop.setVDataValue snoMesh snoMod.tDoorPSeq dv dPs
+
+					-- Save the location of the vertex as so we can tell
+					-- if it has been bumped.. (and perhaps snap it back?)
+
+					local pos = meshop.getVert snoMesh dv
+					format "stowing % %\n" dv pos
+					meshop.setVDataValue snoMesh snoMod.tDoorPosX dv pos.x
+					meshop.setVDataValue snoMesh snoMod.tDoorPosY dv pos.y
+					meshop.setVDataValue snoMesh snoMod.tDoorPosZ dv pos.z
+
 					numStored += 1
 				)
 				else (
 					-- This the second time we've seen this vert
-					if (info.x == d) then (
+					if (dPn == d) then (
 						format "loopy door detected %\n" d
-						info.y = 0						
-						info.z = bit.or (info.z as integer) flags						
+						if (v != snoDoor.verts.count) then (
+							format "BROKEN loopy door detected % %\n" d
+						)
+						dPs = -v -- negative value indicates we are first AND last
+						meshop.setVDataValue snoMesh snoMod.tDoorPseq dv dPs								
 					)
 					else (
 						-- we have started a new door
-						if (info.y != 0) then (
-							format "borked door detected % %\n" d info.y
+						if (dQn != 0) then (
+							format "triple (or more) door detected % %\n" d dQn
 						)
-						info.y = d
-						info.z = bit.or (info.z as integer) (bit.shift 2 flags)
+						dQn = d
+						dQs = v
+						meshop.setVDataValue snoMesh snoMod.tDoorQNum dv dQn
+						meshop.setVDataValue snoMesh snoMod.tDoorQSeq dv dQs					
 					)					
 				)
-				format "    info % %\n" dv info 
-				meshop.setMapVert snoMesh snoMod.tDoorChannel dv info
+				format "    info % % % % %\n" dv dPn dPs dQn dQs 
 			)
 		)
 
@@ -166,41 +211,44 @@ category:"Siege Max"
 
 		local doorVerts = #()
 		for v = 1 to snoMesh.numVerts do (
-			local info = meshop.getMapVert snoMesh snoMod.tDoorChannel v
-			local d0 = info.x as integer			
-			local d1 = info.y as integer			
-			if (d0 != 0) then (
-				format "We need to restore % %\n" v info
+
+			local dPn = ((meshop.getVDataValue snoMesh snoMod.tDoorPNum v) as integer)
+			local dPs = ((meshop.getVDataValue snoMesh snoMod.tDoorPSeq v) as integer)
+			local dQn = ((meshop.getVDataValue snoMesh snoMod.tDoorQNum v) as integer)
+			local dQs = ((meshop.getVDataValue snoMesh snoMod.tDoorQSeq v) as integer)
+
+			local pos = point3 \
+						(meshop.getVDataValue snoMesh snoMod.tDoorPosX v) \
+			 			(meshop.getVDataValue snoMesh snoMod.tDoorPosY v) \
+			  			(meshop.getVDataValue snoMesh snoMod.tDoorPosZ v) 
+	
+			if (dPn != 0) then (
+				format "We need to restore % % % % % %\n" v dPn dPs dQn dQs pos
 				numFound += 1
-				if doorVerts[d0] == undefined then (
-					doorVerts[d0] = #{v}
+				if doorVerts[dPn] == undefined then (
+					doorVerts[dPn] = #()
 				)
-				else (
-					doorVerts[d0][v] = true
-				)
-				if (d1 != 0) then (
-					if doorVerts[d1] == undefined then (
-						doorVerts[d1] = #{v}
+				doorVerts[dPn][dPs] = v
+				if (dQn != 0) then (
+					if doorVerts[dQn] == undefined then (
+						doorVerts[dQn] = #()
 					)
-					else (
-						doorVerts[d1][v] = true
-					)
+					doorVerts[dQn][dQs] = v
 				)
 			)
 		)
 		
-		format "Found info in % verts\n" numFound
+		format "Found info for % verts\n" numFound
 
 		for d = 1 to doorVerts.count do (
-			doorVertSet = doorVerts[d]
-			doorEdgeList = (collectDoorEdgesForVerts snoMesh doorVertSet)
-			format "restoring % % %\n" d doorVertSet doorEdgeList
+			local doorVertList = doorVerts[d]
+			local doorEdgeList = collectDoorEdgesForVerts snoMesh (doorVertList as bitarray)
+			format "restoring % % %\n" d doorVertList doorEdgeList
 			-- Now we need to know if this really is a 
 			-- TODO perhaps a little validation here...
-			snoMod.tDoorList[d].verts = doorVertSet as array
+			snoMod.tDoorList[d].verts = doorVertList
 			snoMod.tDoorList[d].edges = doorEdgeList
 		)
-
 
 	)
 			
