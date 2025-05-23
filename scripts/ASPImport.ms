@@ -769,7 +769,7 @@ rollout ASPImport "ASP Import"
       local f = 1
       for i = 1 to subMesh[sm].numSubTextures do
       (
-        for j = 1 to subMesh[sm].dataBSMM[i].faceSpan do
+        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do
         (
           local a = subMesh[sm].dataBTRI.cornerIndex[f].x + subMesh[sm].dataBTRI.cornerStart[i] + cornOffset - 1
           local b = subMesh[sm].dataBTRI.cornerIndex[f].y + subMesh[sm].dataBTRI.cornerStart[i] + cornOffset - 1
@@ -785,7 +785,7 @@ rollout ASPImport "ASP Import"
     local meshMids = #()
     for sm = 1 to numSubMeshes do
       for i = 1 to subMesh[sm].numSubTextures do
-        for j = 1 to subMesh[sm].dataBSMM[i].faceSpan do
+        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do
           append meshMids subMesh[sm].dataBSMM[i].textureIndex
 
     -- create mesh
@@ -827,22 +827,28 @@ rollout ASPImport "ASP Import"
     t.diffuseMapEnable = true
     t.opacityMapEnable = true
 	
-    -- look for the bitmap in the output path.\	
-    rawpath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n) + ".raw"
+    local extensions = #(".dds", ".raw", ".psd")
+    local basePath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n)
+    local texturepath = ""
     
-    if not (doesFileExist rawpath) then (
+    found = false
+    for ext in extensions do (
+      texturepath = basePath + ext
+      if (doesFileExist texturepath) then (
+        if (chk_Debug.checked) do format "Found: %\n" texturepath         
+        found = true
+        exit
+      )
+    )
+    if not found then (
       if (chk_Debug.checked) do format "Missing: %\n" rawpath 
-      rawpath = n + ".raw"
-      -- TODO:
-      --   search other potential paths, or PSD files		
-    ) else (
-      if (chk_Debug.checked) do format "Found: %\n" rawpath 
+      texturepath = basePath
     )
     
     t.diffuseMap = BitmapTexture name:(n + "_diffuse") \
-                   filename:(rawpath)
+                   filename:(texturepath)
     t.opacityMap = BitmapTexture name:(n + "_opacity") \
-                   filename:(rawpath) \
+                   filename:(texturepath) \
                    monoOutput: 1 \
                    alphaSource: 0
 
@@ -947,12 +953,12 @@ rollout ASPImport "ASP Import"
         myBone[i].parent = myBone[parent]
 
       -- position and orientate relative to parent
-      in coordsys parent myBone[i].rotation = FlipUpQuat dataRPOS[2][i].rot
-      in coordsys parent myBone[i].position = (FlipUp dataRPOS[2][i].pos) * spn_Scale.value * 1000
+      in coordsys parent myBone[i].rotation = FlipUpQuat dataRPOS[i].rot
+      in coordsys parent myBone[i].position = (FlipUp dataRPOS[i].pos) * spn_Scale.value * 1000
 
       -- grips must be prerotated (hack fix)
       if (myBone[i].name == "weapon_grip" or myBone[i].name == "shield_grip") do
-        in coordsys parent myBone[i].rotation = (FlipUpQuat dataRPOS[2][i].rot) * ((angleAxis 90 [1,0,0]) as quat)
+        in coordsys parent myBone[i].rotation = (FlipUpQuat dataRPOS[i].rot) * ((angleAxis 90 [1,0,0]) as quat)
 
       -- set miscellaneous properties
       if (myBone[i].name != "weapon_grip" and myBone[i].name != "shield_grip" and
