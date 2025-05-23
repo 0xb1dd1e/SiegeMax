@@ -138,7 +138,8 @@ rollout fltrASPSubMesh "Sub Mesh Tools" width:200 height:231
 		else return #{}
 	)
 
-	fn SetMeshBits bits =
+	fn SetMeshBits bits =
+
 	(
 		if (ckbHead.checked) then $.Modifiers["Siege Max ASP"].tHeadBits	= bits 
 		else if (ckbHand.checked) then $.Modifiers["Siege Max ASP"].tHandBits = bits 
@@ -273,7 +274,8 @@ fn ASPPopUpSetEnabled flg =
 			fltrASPSubMesh.SetEnabled flg
 			fltrASPRenderFlags.SetEnabled flg
 		)
-	)
+	)
+
 	--catch
 	--(
 	--	format "Caught error in ASPPopUpSetEnabled()\n"
@@ -326,3 +328,12 @@ callbacks.AddScript #selectionSetChanged  "ASPPopUpSelectionUpdate()" id:#ASPPOP
 
 
 
+/*
+
+listener one-liner to reload the WIP
+
+clearlistener(); filein ((GetDir #scripts) +"\\ASPImport.ms"); lanceImportASP(); setListenerSel #(0,0)
+
+Known problems:
+
+*/
