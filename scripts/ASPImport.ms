@@ -55,14 +55,25 @@ rollout ASPImport "ASP Import"
   struct strBSMM ( textureIndex, numberOfFaces )
   struct strBCRN ( pos, nrm, col, txc )
   struct strWCRN ( pos, weight, bone, nrm, col, txc )
-  struct strBVMP ( count, cornerIndex )
+  struct strBVMP ( count, cornersInfluenced=#() )
   struct strBTRI ( cornerStart, cornerSpan, cornerIndex )
-  struct strBVWL ( weight, bone )
+  struct strBVWL ( bones, weights )
   struct strSTCH ( token, vertexCount, vertexIndex )
   struct strRPOS ( invRot, invPos, rot, pos )
 
 
   fn DumpMesh subMesh = (
+
+    fn DumpList lst cutoff = (
+      for v = 1 to lst.count do (
+        if (v <= cutoff or v > lst.count-cutoff) then (
+          format "  %: %\n" v lst[v]
+        )
+        else if (v == (cutoff+1) and lst.count > (cutoff*2)) then (
+          format "     ...\n"
+        )         
+      )        
+    )
 
     format "submesh[%]:\n" subMesh.id
 
@@ -78,58 +89,20 @@ rollout ASPImport "ASP Import"
     )
 
     format " dataBVTX:\n"
-    for v = 1 to subMesh.dataBVTX.count do (
-      if (v < 4 or v > subMesh.dataBVTX.count-3) then (
-        format "  %: %\n" v subMesh.dataBVTX[v]
-      )
-      else if (v == 4 and subMesh.dataBVTX.count>6) then (
-        format "     ...\n"
-      )
-    )
+    DumpList subMesh.dataBVTX 3
 
     format " dataBCRN       % \n" subMesh.dataBCRN
 
     format " dataWCRN:\n"
-    for v = 1 to subMesh.dataWCRN.count do (
-      if (v < 4 or v > subMesh.dataWCRN.count-3) then (
-        format "  %: %\n" v subMesh.dataWCRN[v]
-      )
-      else if (v == 4 and subMesh.dataWCRN.count>6) then (
-        format "     ...\n"
-      )
-    )    
+    DumpList subMesh.dataWCRN 50 
 
     format " dataBVMP:\n"
-    for v = 1 to subMesh.dataBVMP.count do (
-      if (v < 4 or v > subMesh.dataBVMP.count-3) then (
-        format "  %: %\n" v subMesh.dataBVMP[v]
-      )
-      else if (v == 4 and subMesh.dataBVMP.count>6) then (
-        format "     ...\n"
-      )
-    )    
+    DumpList subMesh.dataBVMP 50 
 
-    format " dataBTRI: % \n" subMesh.dataBTRI
-    /*
-    for v = 1 to subMesh.dataBTRI.count do (
-      if (v < 4 or v > subMesh.dataBTRI.count-3) then (
-        format "  %: %\n" v subMesh.dataBTRI[v]
-      )
-      else if (v == 4 and subMesh.dataBTRI.count>6) then (
-        format "     ...\n"
-      )
-    ) 
-    */ 
+    format " dataBTRI: % \n" subMesh.dataBTRI -- list of lists
 
     format " dataBVWL:\n"
-    for v = 1 to subMesh.dataBVWL.count do (
-      if (v < 4 or v > subMesh.dataBVWL.count-3) then (
-        format "  %: %\n" v subMesh.dataBVWL[v]
-      )
-      else if (v == 4 and subMesh.dataBVWL.count>6) then (
-        format "     ...\n"
-      )
-    )            
+    DumpList subMesh.dataBVWL 50     
 
     format " dataSTCH       % \n" subMesh.dataSTCH    
   )
@@ -399,8 +372,9 @@ rollout ASPImport "ASP Import"
     )
 
     subMesh[curSM].dataBVTX = #()
-    for i = 1 to subMesh[curSM].numVertices do
+    for i = 1 to subMesh[curSM].numVertices do (
       append subMesh[curSM].dataBVTX (ReadVector fin)
+    )
 
     if (chk_Debug.checked) do format "ok!\n"
 
@@ -479,16 +453,23 @@ rollout ASPImport "ASP Import"
     local version = ReadLong fin
 
     subMesh[curSM].dataBVMP = #()
-    local i, j
-    for i = 1 to subMesh[curSM].numVertices do
+    local v, c
+    local maxCorn = -1
+    for v = 1 to subMesh[curSM].numVertices do
     (
-      subMesh[curSM].dataBVMP[i] = strBVMP()
-      subMesh[curSM].dataBVMP[i].count = ReadLong fin
-      subMesh[curSM].dataBVMP[i].cornerIndex = #()
-      for j = 1 to subMesh[curSM].dataBVMP[i].count do
-        subMesh[curSM].dataBVMP[i].cornerIndex[j] = (ReadLong fin) + 1
+      newbie = strBVMP count:(ReadLong fin)
+      for c = 1 to newbie.count do (
+        ci = (ReadLong fin) + 1
+        if maxCorn < ci then maxCorn = ci
+        newbie.cornersInfluenced[c] =ci
+      )
+      subMesh[curSM].dataBVMP[v] = newbie
+    )
+    if (maxCorn != subMesh[curSM].numCorners) then (
+      messageBox "Error The max corner index we encountered was % (should be %)\n" maxCorn subMesh[curSM].numCorners
     )
     if (chk_Debug.checked) do format "ok!\n" 
+
     format "yer post ReadBVMP mesh is\n"
     DumpMesh subMesh[curSM]
   )
@@ -566,48 +547,34 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "debug: reading BVWL section..n"
     local version = ReadLong fin
 
-    local i, j    
-    local boneCornID = #()
-    local boneCornWt = #()
-    for i = 1 to numBones do
-    (
-      boneCornID[i] = #()
-      boneCornWt[i] = #()
+    local v, b, i, j, count    
+
+    for v = 1 to subMesh[curSM].numVertices do (
+      subMesh[curSM].dataBVWL[v] = strBVWL bones:#() weights:#()
     )
 
-    for i = 1 to numBones do
+    for b = 1 to numBones do
     (
-      local count = ReadLong fin
-      if count < 0 then (
+      count = ReadLong fin
+      if count < 0 and b == numBones then (
         -- We could have a number of bones, only with a rigid 
         -- weight, but in most cases there was only 1 bone.
         -- TODO: The only way to tell is scan them in and see if 
         -- we reach the next section. 
-        boneCornID[1][1] = 1
-        boneCornWt[1][1] = 1.0
+        for i = v to subMesh[curSM].numVertices do (
+          subMesh[curSM].dataBVWL[v].bones = #(1)
+          subMesh[curSM].dataBVWL[v].weights = #(1)
+        )
       )
       else (
         for j = 1 to count do (
-          boneCornID[i][j] = (ReadLong fin) + 1
-          boneCornWt[i][j] = ReadFloat fin
+          v = (ReadLong fin) + 1
+          append subMesh[curSM].dataBVWL[v].bones b
+          append subMesh[curSM].dataBVWL[v].weights (ReadFloat fin)
         )
       )
     )
 
-    -- convert bone->vert/weight mapping to vert->bone/weight mapping
---    subMesh[curSM].dataBVWL = #()
---    for i = 1 to subMesh[curSM].numCorners do
---      subMesh[curSM].dataBVWL[i] = strBVWL weight:#() bone:#()
-
---    for i = 1 to numBones do
---      if (boneCornID[i].count > 0) do
---        for j = 1 to boneCornID[i].count do
---        (
---          local vert = boneCornID[i][j]
---          local size = subMesh[curSM].dataBVWL[vert].bone.count + 1
---          subMesh[curSM].dataBVWL[vert].bone[size] = i
---          subMesh[curSM].dataBVWL[vert].weight[size] = boneCornWt[i][j]
---        )
     if (chk_Debug.checked) do format "ok!\n"
 
   )
@@ -1004,7 +971,7 @@ rollout ASPImport "ASP Import"
 
   fn MakeSkin =
   (
-    local i
+    local i,j,k
 
     if (chk_Debug.checked) do format "debug: creating skin..."
 
@@ -1020,9 +987,7 @@ rollout ASPImport "ASP Import"
 
     -- reset all vertex weights
     subObjectLevel = 1
-    allVerts = #()
-    for i = 1 to myMesh.numVerts do
-      append allVerts i
+    allVerts = for j = 1 to myMesh.numVerts collect j
     skinOps.SelectVertices mySkin allVerts
     skinOps.resetSelectedVerts mySkin
 
@@ -1031,12 +996,25 @@ rollout ASPImport "ASP Import"
     with redraw off
       for sm = 1 to numSubMeshes do
       (
-        for i = 1 to subMesh[sm].numCorners do
-		(
-		  if (subMesh[sm].dataWCRN[i].bone != #()) then	
-          	skinOps.ReplaceVertexWeights mySkin (i + cornOffset) subMesh[sm].dataWCRN[i].bone subMesh[sm].dataWCRN[i].weight
-		)
+        /*
+        for k = 1 to subMesh[sm].numCorners do
+	    	(
+		      if (subMesh[sm].dataBVWL[k].bones.count > 0) then	(
+            local boneList = subMesh[sm].dataBVWL[k].bones
+            local weightList = subMesh[sm].dataBVWL[k].weights
+          	skinOps.ReplaceVertexWeights mySkin (k + cornOffset) boneList weightList
+          )
+		    )
         cornOffset += subMesh[sm].numCorners
+        */
+        for v = 1 to subMesh[sm].numVertices do (
+          local boneList = subMesh[sm].dataBVWL[v].bones
+          local weightList = subMesh[sm].dataBVWL[v].weights
+          local corners = subMesh[sm].dataBVMP[v].cornersInfluenced
+          for corner in corners do (
+          	skinOps.ReplaceVertexWeights mySkin corner boneList weightList
+          )          
+		    )        
       )
 
     subObjectLevel = 0
