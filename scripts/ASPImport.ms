@@ -743,7 +743,7 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn MakeMesh =
+  fn MakeMesh WE_NEED_TO_FLIP:true =
   (
     local sm, i, j
 
@@ -758,8 +758,13 @@ rollout ASPImport "ASP Import"
     -- gather texture coordinates
     local meshTexc = #()
     for sm = 1 to numSubMeshes do
-      for i = 1 to subMesh[sm].numCorners do
-        append meshTexc subMesh[sm].dataWCRN[i].txc
+      for i = 1 to subMesh[sm].numCorners do (
+        uvs = subMesh[sm].dataWCRN[i].txc
+        if (WE_NEED_TO_FLIP) then (
+          uvs[2] = 1.0 - uvs[2]
+        )
+        append meshTexc uvs
+      )
 
     -- gather faces
     local meshFace = #()
