@@ -6,6 +6,7 @@
 
 rollout ASPImport "ASP Import"
 (
+  /*
   local BMSH = 1213418818
   local BONH = 1213091650
   local BSUB = 1112888130
@@ -36,21 +37,22 @@ rollout ASPImport "ASP Import"
   local NECK = 1262699854
   local WRST = 1414746711
   local ANKL = 1280003649
+*/
 
   struct strBoneInfo ( name, parent, flags )
-  struct strSubMesh ( id = -1, \
-                      numSubTextures = 0, \
-                      numVertices = 0, \
-                      numCorners = 0, \
-                      numFaces = 0, \
-                      numStitches = 0, \
-                      dataBSMM = #(), \
-                      dataBVTX = #(), \
-                      dataBCRN = #(), \
-                      dataWCRN = #(), \
-                      dataBVMP = #(), \
-                      dataBTRI = #(), \
-                      dataBVWL = #(),\
+  struct strSubMesh ( id = -1, 
+                      numSubTextures = 0,
+                      numVertices = 0,
+                      numCorners = 0,
+                      numFaces = 0,
+                      numStitches = 0,
+                      dataBSMM = #(),
+                      dataBVTX = #(),
+                      dataBCRN = #(),
+                      dataWCRN = #(),
+                      dataBVMP = #(),
+                      dataBTRI = #(),
+                      dataBVWL = #(),
                       dataSTCH = #() )
   struct strBSMM ( textureIndex, numberOfFaces )
   struct strBCRN ( pos, nrm, col, txc )
@@ -94,15 +96,15 @@ rollout ASPImport "ASP Import"
     format " dataBCRN       % \n" subMesh.dataBCRN
 
     format " dataWCRN:\n"
-    DumpList subMesh.dataWCRN 50 
+    DumpList subMesh.dataWCRN 3 
 
     format " dataBVMP:\n"
-    DumpList subMesh.dataBVMP 50 
+    DumpList subMesh.dataBVMP 3 
 
     format " dataBTRI: % \n" subMesh.dataBTRI -- list of lists
 
     format " dataBVWL:\n"
-    DumpList subMesh.dataBVWL 50     
+    DumpList subMesh.dataBVWL 3     
 
     format " dataSTCH       % \n" subMesh.dataSTCH    
   )
@@ -241,28 +243,22 @@ rollout ASPImport "ASP Import"
     return #(a,b,c,d)
   )
 
-  struct strChunkHeader  ( 
-    magic, 
-    majorVersion, 
-    minorVersion, 
-    extraVersion 
-  )
+  struct strChunkHeader  ( mark = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0 )
 
   fn ReadChunkHeader fin = (
     return (strChunkHeader                      \
-        magic: (ReadFourCC fin)                 \
+        mark: (ReadFourCC fin)                  \
         majorVersion: (ReadByte fin #unsigned)  \
         minorVersion: (ReadByte fin #unsigned)  \
         extraVersion: (ReadShort fin #unsigned) \
       )
   )
 
-  fn ReadBMSH fin =
-  (
+  fn ReadBMSH fin = (
     if (chk_Debug.checked) do format "debug: reading BMSH section..."
-    local version = ReadLong fin
 
     local sizeTextField = ReadLong fin
+
     numBones = ReadLong fin
     numTextures = ReadLong fin
     numVerticesTotal = ReadLong fin
@@ -271,8 +267,7 @@ rollout ASPImport "ASP Import"
 
     -- read text field
     local token = #()
-    while (sizeTextField > 0) do
-    (
+    while (sizeTextField > 0) do (
       append token (ReadString fin)
       local size = token[token.count].count + 1
       local padding = mod (4 - (mod size 4)) 4
@@ -293,13 +288,13 @@ rollout ASPImport "ASP Import"
 
     subMesh = #()
     if (chk_Debug.checked) do format "ok!\n"    
+
+    return true
   )
 
 
-  fn ReadBONH fin =
-  (
+  fn ReadBONH fin = (
     if (chk_Debug.checked) do format "debug: reading BONH section..."
-    local version = ReadLong fin
 
     for i = 1 to numBones do
     (
@@ -313,27 +308,20 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "ok!\n"       
   )
 
-  struct ChunkHeader ( magic = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0
-  )
-
-  fn ReadBSMM fin =
-  (
-    local version = ReadChunkHeader fin
-
+  fn ReadBSMM fin = (
+    if (chk_Debug.checked) do format "debug: reading BSMM section..."    
     local materials = #()
-    local numSubTextures = (ReadLong fin #unsigned)
-    for i = 1 to numSubTextures do (
+    local numOfMaterials = (ReadLong fin #unsigned)
+    for i = 1 to numOfMaterials do (
       append materials (strBSMM  textureIndex: ((ReadLong fin) + 1) numberOfFaces: (ReadLong fin) )
     )
-    return materials
+    subMesh[curSM].dataBSMM = materials
+    if (chk_Debug.checked) do format "ok!\n"          
   )
 
-  fn ReadBSUB fin =
-  (
+  fn ReadBSUB fin = (
 
     if (chk_Debug.checked) do  format "debug: reading BSUB section..."
-
-    local version = ReadLong fin
 
     curSM  = (ReadLong fin #unsigned) + 1
     subMesh[curSM] = strSubMesh()
@@ -342,28 +330,12 @@ rollout ASPImport "ASP Import"
     subMesh[curSM].numVertices = (ReadLong fin #unsigned)
     subMesh[curSM].numCorners = (ReadLong fin #unsigned)
     subMesh[curSM].numFaces = (ReadLong fin #unsigned)
-    subMesh[curSM].dataBSMM = (ReadBSMM fin)
 
-/*
-    chkVal = ReadLong fin
-    if (numTextures != chkVal) do (
-      format "\ntexture issue? % != %\n" numTextures chkVal
-      format "\nerror: BSUB numTextures don't match\n"
-      if (chk_Debug.checked) do (
-        messageBox "error: BSUB numTextures don't match"
-      )
-    )
-    subMesh[curSM].numVertices = ReadLong fin
-    subMesh[curSM].numCorners = ReadLong fin
-    subMesh[curSM].numFaces = ReadLong fin
-*/
     if (chk_Debug.checked) do format "ok!\n"        
   )
 
-  fn ReadBVTX fin =
-  (
+  fn ReadBVTX fin = (
     if (chk_Debug.checked) do format "debug: reading BVTX section..."
-    local version = ReadLong fin
 
     if (subMesh[curSM].numVertices != ReadLong fin) do (
       if (chk_Debug.checked) do messageBox "error: BVTX numVertices don't match"
@@ -381,11 +353,8 @@ rollout ASPImport "ASP Import"
     return true              
   )
 
-
-  fn ReadBCRN fin =
-  (
+  fn ReadBCRN fin = (
     if (chk_Debug.checked) do  format "debug: reading BCRN section..."
-    local version = ReadLong fin
 
     if (subMesh[curSM].numCorners != ReadLong fin) do
       if (chk_Debug.checked) do (
@@ -404,18 +373,12 @@ rollout ASPImport "ASP Import"
       subMesh[curSM].dataBCRN[i] = strBCRN pos:p nrm:n col:c txc:t
     )
     if (chk_Debug.checked) do format "ok!\n"        
-
-    format "yer post ReadBCRN mesh is \n"
-    DumpMesh subMesh[curSM]
-
   )
 
 
-  fn ReadWCRN fin =
-  (
+  fn ReadWCRN fin FixOffByOne = (
     if (chk_Debug.checked) do format "debug: reading WCRN section..."
-    local version = ReadLong fin
-
+ 
     if (subMesh[curSM].numCorners != ReadLong fin) do
       if (chk_Debug.checked) do
         messageBox "error: WCRN numCorners don't match"
@@ -426,10 +389,10 @@ rollout ASPImport "ASP Import"
       local b = #()
       local p = ReadVector fin
       local w = ReadFourFF fin
-      if ((VersionOf version) > 40) then
-        b = ReadFourBB2 fin
-      else 
+      if FixOffByOne then
         b = ReadFourBB fin
+      else 
+        b = ReadFourBB2 fin
       local n = ReadVector fin
       local c = ReadFourBB fin
       local t = ReadCoord fin
@@ -447,10 +410,8 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn ReadBVMP fin =
-  (
+  fn ReadBVMP fin = (
     if (chk_Debug.checked) do format "debug: reading BVMP section..."
-    local version = ReadLong fin
 
     subMesh[curSM].dataBVMP = #()
     local v, c
@@ -469,18 +430,11 @@ rollout ASPImport "ASP Import"
       messageBox "Error The max corner index we encountered was % (should be %)\n" maxCorn subMesh[curSM].numCorners
     )
     if (chk_Debug.checked) do format "ok!\n" 
-
-    format "yer post ReadBVMP mesh is\n"
-    DumpMesh subMesh[curSM]
   )
 
-
-  fn ReadBTRI fin =
-  (
+  fn ReadBTRI fin UseAncientLayout:false = (
     if (chk_Debug.checked) do
       format "debug: reading BTRI section..."
-
-    local version = ReadLong fin
 
     if (subMesh[curSM].numFaces != ReadLong fin) do
       messageBox "error: BTRI numFaces don't match"
@@ -491,7 +445,7 @@ rollout ASPImport "ASP Import"
     subMesh[curSM].dataBTRI.cornerStart = #()
     subMesh[curSM].dataBTRI.cornerSpan = #()
 
-    if ((VersionOf version) >= 22) then
+    if not UseAncientLayout then
     (
       for i = 1 to subMesh[curSM].numSubTextures do
       (
@@ -500,6 +454,8 @@ rollout ASPImport "ASP Import"
       )
     )    
 /*    
+    -- TODO: track down Ancient
+
     if ((VersionOf version) == 22) then
     (
       for i = 1 to subMesh[curSM].numSubTextures do
@@ -542,10 +498,8 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn ReadBVWL fin =
-  (
-    if (chk_Debug.checked) do format "debug: reading BVWL section..n"
-    local version = ReadLong fin
+  fn ReadBVWL fin = (
+    if (chk_Debug.checked) do format "debug: reading BVWL section..."
 
     local v, b, i, j, count    
 
@@ -583,7 +537,6 @@ rollout ASPImport "ASP Import"
   fn ReadSTCH fin =
   (
     if (chk_Debug.checked) do format "debug: reading STCH section..."
-    local version = ReadLong fin
 
     subMesh[curSM].numStitches = ReadLong fin
 
@@ -605,7 +558,6 @@ rollout ASPImport "ASP Import"
   fn ReadRPOS fin =
   (
     if (chk_Debug.checked) do format "debug: reading RPOS section..."
-    local version = ReadLong fin
 
     if (numBones != ReadLong fin) do
       if (chk_Debug.checked) do
@@ -622,22 +574,18 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do format "ok!\n"
-
-    format "yer post ReadRPOS mesh is\n"
-    DumpMesh subMesh[curSM]    
   )
 
   struct strBoundingBox (
       Name,
       Position,
       Orientation,
-      HalfDiag;
+      HalfDiag
   )
 
   fn ReadBBOX fin =
   (
     if (chk_Debug.checked) do  format "debug: reading BBOX section..."
-    local version = ReadLong fin
 
     local numBoxes = ReadLong fin 
     local boxes = #()
@@ -664,9 +612,6 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do
       format "debug: reading INFO section...\n"
 
-    if "INFO" != (ReadFourCC fin) do
-      messageBox "error: INFO expected marker"
-
     local numInfoEntries = ReadLong fin
     for i = 1 to numInfoEntries do
     (
@@ -677,40 +622,32 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn ReadASP fin =
-  (
-    while true do
+  fn ReadASP fin = (
+    legal = ReadBMSH fin
+    while legal do
     (
-      local mark = ReadFourCC fin
-           if (mark == "BMSH") then (ReadBMSH fin)
-      else if (mark == "BONH") then (ReadBONH fin)
-      else if (mark == "BSUB") then (ReadBSUB fin)
-      else if (mark == "BSMM") then (ReadBSMM fin)
-      else if (mark == "BVTX") then (ReadBVTX fin)
-      else if (mark == "BCRN") then (ReadBCRN fin)
-      else if (mark == "WCRN") then (ReadWCRN fin)
-      else if (mark == "BVMP") then (ReadBVMP fin)
-      else if (mark == "BTRI") then (ReadBTRI fin)
-      else if (mark == "BVWL") then (ReadBVWL fin)
-      else if (mark == "STCH") then (ReadSTCH fin)
-      else if (mark == "RPOS") then (ReadRPOS fin)
-      else if (mark == "BBOX") then (ReadBBOX fin)
-      else if (mark == "BEND") then
-      (
-        if (chk_Debug.checked) do format "Reached End-of-Data\n"
-        ReadBEND fin
-        format "yer post ReadBEND mesh is\n"
-        DumpMesh subMesh[curSM]            
-        return true
-      ) else      
-        return false
+      local header = ReadChunkHeader fin
+           if (header.mark == "BONH") then (ReadBONH fin)
+      else if (header.mark == "BSUB") then (ReadBSUB fin)
+      else if (header.mark == "BSMM") then (ReadBSMM fin)
+      else if (header.mark == "BVTX") then (ReadBVTX fin)
+      else if (header.mark == "BCRN") then (ReadBCRN fin)
+      else if (header.mark == "BVMP") then (ReadBVMP fin)
+      else if (header.mark == "BVWL") then (ReadBVWL fin)
+      else if (header.mark == "STCH") then (ReadSTCH fin)
+      else if (header.mark == "RPOS") then (ReadRPOS fin)
+      else if (header.mark == "BBOX") then (ReadBBOX fin)
+      else if (header.mark == "WCRN") then (ReadWCRN fin (header.majorVersion < 5)) 
+      else if (header.mark == "BTRI") then (ReadBTRI fin) -- TODO: check version for ancient tri list layouts
+      else if (header.mark == "BEND") then (ReadBEND fin; exit)
+      else legal = false
     )
 
-    return false
+    return legal
   )
 
 
-  fn MakeMesh WE_NEED_TO_FLIP:true =
+  fn MakeMesh flipVcoord:false =
   (
     local sm, i, j
 
@@ -727,7 +664,7 @@ rollout ASPImport "ASP Import"
     for sm = 1 to numSubMeshes do
       for i = 1 to subMesh[sm].numCorners do (
         uvs = subMesh[sm].dataWCRN[i].txc
-        if (WE_NEED_TO_FLIP) then (
+        if (flipVcoord) then (
           uvs[2] = 1.0 - uvs[2]
         )
         append meshTexc uvs
@@ -993,26 +930,14 @@ rollout ASPImport "ASP Import"
 
     -- set vertex weights
     local cornOffset = 0
+
     with redraw off
       for sm = 1 to numSubMeshes do
       (
-        /*
-        for k = 1 to subMesh[sm].numCorners do
-	    	(
-		      if (subMesh[sm].dataBVWL[k].bones.count > 0) then	(
-            local boneList = subMesh[sm].dataBVWL[k].bones
-            local weightList = subMesh[sm].dataBVWL[k].weights
-          	skinOps.ReplaceVertexWeights mySkin (k + cornOffset) boneList weightList
-          )
-		    )
-        cornOffset += subMesh[sm].numCorners
-        */
         for v = 1 to subMesh[sm].numVertices do (
-          local boneList = subMesh[sm].dataBVWL[v].bones
-          local weightList = subMesh[sm].dataBVWL[v].weights
-          local corners = subMesh[sm].dataBVMP[v].cornersInfluenced
-          for corner in corners do (
-          	skinOps.ReplaceVertexWeights mySkin corner boneList weightList
+          local wl = subMesh[sm].dataBVWL[v]
+          for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
+          	skinOps.ReplaceVertexWeights mySkin corner wl.bones wl.weights
           )          
 		    )        
       )
@@ -1027,19 +952,39 @@ rollout ASPImport "ASP Import"
 
   fn ImportASP fin =
   (
-    if not (ReadASP fin) do
-      return false
+    local aspHeader = ReadChunkHeader fin
 
-    MakeMesh()
+    if (aspHeader.mark != "BMSH") then (
+      messageBox "This is not an ASP with a mesh"
+      return false
+    )    
+
+    if not (ReadASP fin) then (
+      return false
+    )
+
+    if (chk_Debug.checked) do (
+      for sm = 1 to numSubMeshes do (
+        format "SubMesh[%]:\n" sm
+        DumpMesh subMesh[sm]      
+      )
+    ) 
+
+    local isBrokenWorld = aspHeader.majorVersion == 5 and aspHeader.minorVersion == 1
+
+    MakeMesh flipVcoord:isBrokenWorld
 
     if (chk_Texture.checked and numTextures > 0) do
       MakeMaterial()
 
     if (chk_Bone.checked and numBones > 0) do
     (
-      makeBones()
-      if (chk_Skin.checked) do
-        makeSkin()
+      with undo off (      
+        makeBones()
+        if (chk_Skin.checked) do (
+            makeSkin()
+          )
+      )
     )
 
     -- add siegemax specific things
