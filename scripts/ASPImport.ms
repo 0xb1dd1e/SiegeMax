@@ -129,7 +129,8 @@ rollout ASPImport "ASP Import"
 
     format " dataBSMM:\n"
     for m in subMesh.dataBSMM do (
-      format "  [%] numberOfFaces %\n" m.textureIndex m.numberOfFaces
+      format "  texture index [%] numberOfFaces %\n" m.textureIndex m.numberOfFaces
+
     )
 
     format " dataBVTX:\n"
@@ -733,15 +734,15 @@ rollout ASPImport "ASP Import"
       WCRNs = subMesh[sm].dataWCRN
       format "\nyou have % WCRNs to read from" WCRNs.count
       --BVTXs = subMesh[sm].dataBVTX
+      local startIndex = 0;
       for i = 1 to subMesh[sm].dataBSMM.count do (
         local subMeshMat = subMesh[sm].dataBSMM[i]
         local matId = subMeshMat.textureIndex
-        local startIndex = subMesh[sm].dataBTRI.cornerStart[i] + 1
         for j = 1 to subMeshMat.numberOfFaces do (
-          local face = subMesh[sm].dataBTRI.cornerIndex[j]
-          local wA = face.x + startIndex
-          local wB = face.y + startIndex
-          local wC = face.z + startIndex
+          local face = subMesh[sm].dataBTRI.cornerIndex[startIndex + j]
+          local wA = face.x + 1
+          local wB = face.y + 1
+          local wC = face.z + 1
           if (wA > WCRNs.count) then throw ("yer A is hooped " + (wA as string))
           if (wB > WCRNs.count) then throw ("yer B is hooped " + (wB as string))
           if (wC > WCRNs.count) then throw ("yer C is hooped " + (wC as string))
@@ -753,16 +754,9 @@ rollout ASPImport "ASP Import"
           TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
           NrmlFaces[f] = [cA.nrm, cB.nrm, cC.nrm]
           MatiFaces[f] = matId 
-/*
-          if cA.pos > dataWLookup.pos.count or cB.pos > dataWLookup.pos.count or cC.pos > dataWLookup.pos.count then (
-            format "bad % (%) [%,%,%] %\n"  sm f cA.pos cB.pos cC.pos dataWLookup.pos.count
-          ) 
-          else (
-            format "% (%)  %:% %:% %:%\n" sm f  cA.pos dataWLookup.pos[cA.pos] cB.pos dataWLookup.pos[cB.pos] cC.pos dataWLookup.pos[cB.pos]
-          )          
- */         
           f += 1
         )
+        startIndex += subMeshMat.numberOfFaces
       )
       subMeshOffset += subMesh[sm].numCorners
     )
@@ -1104,7 +1098,7 @@ rollout ASPImport "ASP Import"
     if chk_DebugVertList.checked then (
       for sm = 1 to numSubMeshes do (
         dbgMeshes = for v = 1 to subMesh[sm].dataBVTX.count collect (
-          local p = (FlipUp subMesh[sm].dataBVTX[v]) * 1000 * spn_Scale.value
+          local p = (FlipUp dataWLookup.pos[subMesh[sm].dataBVTX[v]]) * 1000 * spn_Scale.value
           Sphere radius:(5 * spn_Scale.value) segs:16 name:(v as string) pos:p smooth:true wirecolor:(color 108 0 136)       
         )
       )
