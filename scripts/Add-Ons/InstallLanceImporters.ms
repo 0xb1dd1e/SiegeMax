@@ -140,8 +140,6 @@ fn ExtendQuadMenus =
 	nsm.AddItem nmi -1
 	nmi = menuMan.createActionItem "LaunchSNOImporter" "Lance Import Tools" 
 	nsm.AddItem nmi -1
-	nmi = menuMan.createActionItem "LaunchSS1SNOImporter" "Lance Import Tools" 
-	nsm.AddItem nmi -1
 			
 )
 

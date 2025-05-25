@@ -3,43 +3,45 @@
 -- 8/23/2002
 -- updates Jan 2004 by Ghastley (DS LoA etc)
 
+-------------------------------------------------------------------------------------------
+-- Updates & Hacks
+--
+--  5/23/2025 biddle - Added support for 5.1 version (DS2BW)
+--  5/24/2025 biddle - Optimize faces and add smoothing groups
+--
+-------------------------------------------------------------------------------------------
+
+filein ((GetDir #scripts) +"\\TopoTools.ms")
 
 rollout ASPImport "ASP Import"
 (
   /*
-  local BMSH = 1213418818
-  local BONH = 1213091650
-  local BSUB = 1112888130
-  local BSMM = 1296913218
-  local BVTX = 1481922114
-  local BCRN = 1314014018
-  local WCRN = 1314014039
-  local BVMP = 1347245634
-  local BTRI = 1230132290
-  local BVWL = 1280792130
-  local STCH = 1212372051
-  local RPOS = 1397706834
-  local BBOX = 1481589314
-  local BEND = 1145980226
-  local INFO = 1330007625
-  local V1_2 = 513
-  local V1_3 = 769   -- introduced WCRN section
-  local V2_0 = 2     -- introduced STCH section
-  local V2_1 = 258   -- introduced BBOX section
-  local V2_2 = 514
-  local V2_3 = 770
-  local V2_4 = 1026
-  local V2_5 = 1282
-  local V4_0 = 4     -- introduced with Siege Max
-  local V4_1 = 260
-  local v5_0 = 5     -- DS LoA
-  local v5_1 = 261   -- DS BW
-  local NECK = 1262699854
-  local WRST = 1414746711
-  local ANKL = 1280003649
+  local V1_2 
+  local V1_3   -- introduced WCRN section
+  local V2_0   -- introduced STCH section
+  local V2_1   -- introduced BBOX section
+  local V2_2
+  local V2_3
+  local V2_4
+  local V2_5
+  local V4_0   -- introduced with Siege Max (DS1)
+  local V4_1
+  local v5_0   -- DS LoA 
+  local v5_1   -- DS2 BW
 */
 
+  struct strChunkHeader  ( mark = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0 )
   struct strBoneInfo ( name, parent, flags )
+  struct strBSMM ( textureIndex, numberOfFaces )
+  struct strBCRN ( pos, nrm, col, txc )
+  struct strBVMP ( count, cornersInfluenced=#() )
+  struct strBTRI ( cornerStart, cornerSpan, cornerIndex )
+  struct strBVWL ( bones=#(), weights=#() )
+  struct strSTCH ( token, vertexCount, vertexIndex )
+  struct strRPOS ( invRot, invPos, rot, pos )
+
+  struct strWCRN  ( pos=#(), weight=#(), bone=#(), nrm=#(), col=#(), txc=#(), opp=#() )
+
   struct strSubMesh ( id = -1, 
                       numSubTextures = 0,
                       numVertices = 0,
@@ -53,18 +55,50 @@ rollout ASPImport "ASP Import"
                       dataBVMP = #(),
                       dataBTRI = #(),
                       dataBVWL = #(),
-                      dataSTCH = #() )
-  struct strBSMM ( textureIndex, numberOfFaces )
-  struct strBCRN ( pos, nrm, col, txc )
-  struct strWCRN ( pos, weight, bone, nrm, col, txc )
-  struct strBVMP ( count, cornersInfluenced=#() )
-  struct strBTRI ( cornerStart, cornerSpan, cornerIndex )
-  struct strBVWL ( bones, weights )
-  struct strSTCH ( token, vertexCount, vertexIndex )
-  struct strRPOS ( invRot, invPos, rot, pos )
+                      dataSTCH = #())
+  
+  struct strBoundingBox ( Name, Position, Orientation, HalfDiag )
 
+  local aspFileIn
+  local nnkName
+  local numBones
+  local numTextures
+  local numVerticesTotal
+  local numSubMeshes
+  local renderFlags
+  local curSM
 
-  fn DumpMesh subMesh = (
+  local textureName
+  local boneInfo
+  local subMesh
+
+  local dataRPOS
+
+  local myMesh
+  local myMat
+  local myBone
+  local mySkin
+
+  local dbgMeshes
+
+  -- Keep a lookup table of all weighted corner attributes
+  local dataLookup
+
+  group "Options"
+  (
+    spinner spn_Scale "Scale:" range:[0.0001,1000.0,1.0] type:#float scale:0.01
+    checkbox chk_Texture "Texture Mesh" checked:true
+    checkbox chk_Bone "Bone Mesh" checked:true
+    checkbox chk_Skin "Skin Mesh" checked:true
+    checkbox chk_FlipUV "Flip UV" checked:false
+    checkbox chk_BoneBall "Bones As Balls" checked:false
+    checkbox chk_SeeThru "See Thru Mesh" checked:false
+    checkbox chk_Debug "Show Debug Info" checked:false
+    checkbox chk_DebugVertList "Debug Vert List" checked:false
+  )
+  button btn_ImportNow "Import..." width:100
+
+  fn DumpData subMesh = (
 
     fn DumpList lst cutoff = (
       for v = 1 to lst.count do (
@@ -104,43 +138,12 @@ rollout ASPImport "ASP Import"
     format " dataBTRI: % \n" subMesh.dataBTRI -- list of lists
 
     format " dataBVWL:\n"
-    DumpList subMesh.dataBVWL 3     
+    DumpList subMesh.dataBVWL 3   
+    
+    format " dataSTCH       % \n" subMesh.dataSTCH
 
-    format " dataSTCH       % \n" subMesh.dataSTCH    
+    format " dataLookup (shared) %\n" dataLookup       
   )
-
-  local aspFileIn
-  local nnkName
-  local numBones
-  local numTextures
-  local numVerticesTotal
-  local numSubMeshes
-  local renderFlags
-  local curSM
-
-  local textureName
-  local boneInfo
-  local subMesh
-  local dataRPOS
-
-  local myMesh
-  local myMat
-  local myBone
-  local mySkin
-
-
-  group "Options"
-  (
-    spinner spn_Scale "Scale:" range:[0.0001,1000.0,1.0] type:#float scale:0.01
-    checkbox chk_Texture "Texture Mesh" checked:true
-    checkbox chk_Bone "Bone Mesh" checked:true
-    checkbox chk_Skin "Skin Mesh" checked:true
-    checkbox chk_BoneBall "Bones As Balls" checked:false
-    checkbox chk_SeeThru "See Thru Mesh" checked:false
-    checkbox chk_Debug "Show Debug Info" checked:false
-  )
-  button btn_ImportNow "Import..." width:100
-
 
   fn FlipUp v =
   (
@@ -152,28 +155,6 @@ rollout ASPImport "ASP Import"
   (
     return (quat q.x -q.z q.y q.w)
   )
-
-
-  fn VersionOf v =
-  (
-    case of
-    (
-      (v == V1_2): return 12
-      (v == V1_3): return 13
-      (v == V2_0): return 20
-      (v == V2_1): return 21
-      (v == V2_2): return 22
-      (v == V2_3): return 23
-      (v == V2_4): return 24
-      (v == V2_5): return 25
-      (v == V4_0): return 40
-      (v == V4_1): return 41
-      (v == V5_0): return 50
-      (v == V5_1): return 51
-      default:     return 0
-    )
-  )
-
 
   fn ReadQuat fin =
   (
@@ -243,8 +224,37 @@ rollout ASPImport "ASP Import"
     return #(a,b,c,d)
   )
 
-  struct strChunkHeader  ( mark = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0 )
+  fn Quantize v tol = (
+    s = if v < 0 then ceil( (v * tol) - 0.5) else floor( (v * tol) + 0.5)
+    return s / tol
+  )
 
+  fn ReadUVee fin = (
+    -- Sub-texel accuracy is suspect in a lot 
+    -- of the uv mapping that is encountered
+    u = Quantize (ReadFloat fin) 1024
+    v = Quantize (ReadFloat fin) 1024
+    return point3 u v 0 
+  )  
+
+  fn ReadNormal fin = (
+    -- Actual per corner normal values aren't re-used. 
+    -- They matched to generate the smoothing groups.
+    x = Quantize (ReadFloat fin) 256
+    y = Quantize (ReadFloat fin) 256
+    z = Quantize (ReadFloat fin) 256
+    return point3 x y z 
+  )
+
+  fn ReadColour fin = (
+      return #(
+        (ReadByte fin #unsigned),
+        (ReadByte fin #unsigned),
+        (ReadByte fin #unsigned),
+        (ReadByte fin #unsigned)
+      )
+  )   
+  
   fn ReadChunkHeader fin = (
     return (strChunkHeader                      \
         mark: (ReadFourCC fin)                  \
@@ -252,6 +262,15 @@ rollout ASPImport "ASP Import"
         minorVersion: (ReadByte fin #unsigned)  \
         extraVersion: (ReadShort fin #unsigned) \
       )
+  )
+  
+  fn fetchIndex itms val addIfMissing:true = (
+    i = findItem itms val
+    if i == 0 and addIfMissing then (
+      append itms val
+      i = itms.count
+    )
+    return i
   )
 
   fn ReadBMSH fin = (
@@ -323,9 +342,9 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do  format "debug: reading BSUB section..."
 
-    curSM  = (ReadLong fin #unsigned) + 1
+    curSM  += 1
     subMesh[curSM] = strSubMesh()
-    subMesh[curSM].id = curSM - 1
+    subMesh[curSM].id = (ReadLong fin #unsigned)
     subMesh[curSM].numSubTextures = (ReadLong fin #unsigned)
     subMesh[curSM].numVertices = (ReadLong fin #unsigned)
     subMesh[curSM].numCorners = (ReadLong fin #unsigned)
@@ -375,38 +394,34 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "ok!\n"        
   )
 
+  fn ReadWCorner fin FixOffByOne lookup =
+  (
+    local p, w, b, n, c, u
+    p = fetchIndex lookup.pos (ReadVector fin)
+    w = (ReadFourFF fin)
+    b = ((if FixOffByOne then ReadFourBB else ReadFourBB2) fin)   
+    n = fetchIndex lookup.nrm (ReadNormal fin)
+    c = fetchIndex lookup.col (ReadColour fin)
+    u = fetchIndex lookup.txc (ReadUVee fin)
+    return (strWCRN pos:p weight:w bone:b nrm:n col:c txc:u)
+  )
 
   fn ReadWCRN fin FixOffByOne = (
     if (chk_Debug.checked) do format "debug: reading WCRN section..."
  
-    if (subMesh[curSM].numCorners != ReadLong fin) do
-      if (chk_Debug.checked) do
-        messageBox "error: WCRN numCorners don't match"
+    if (subMesh[curSM].numCorners != ReadLong fin) do (
+      messageBox "error: WCRN numCorners don't match"
+    )
 
     subMesh[curSM].dataWCRN = #()
-    for i = 1 to subMesh[curSM].numCorners do
-    (
-      local b = #()
-      local p = ReadVector fin
-      local w = ReadFourFF fin
-      if FixOffByOne then
-        b = ReadFourBB fin
-      else 
-        b = ReadFourBB2 fin
-      local n = ReadVector fin
-      local c = ReadFourBB fin
-      local t = ReadCoord fin
-      -- remove null bone/weights
-      for i = 4 to 1 by -1 do
-        if (w[i] == 0) do
-        (
-          deleteItem w i
-          deleteItem b i
-        )
-      subMesh[curSM].dataWCRN[i] = strWCRN pos:p weight:w bone:b nrm:n col:c txc:t
+    for i = 1 to subMesh[curSM].numCorners do (
+      append subMesh[curSM].dataWCRN (ReadWCorner fin FixOffByOne dataLookup)
     )
 
     if (chk_Debug.checked) do format "ok!\n" 
+
+    format "After ReadWCRN SubMesh[%]:\n" curSM
+    DumpData subMesh[curSM]    
   )
 
 
@@ -454,19 +469,21 @@ rollout ASPImport "ASP Import"
       )
     )    
 /*    
-    -- TODO: track down Ancient
+    -- TODO: track down Ancient Triangle/Face examples
 
-    if ((VersionOf version) == 22) then
+    if (version == 2.2) then
     (
       for i = 1 to subMesh[curSM].numSubTextures do
         subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
+
       subMesh[curSM].dataBTRI.cornerStart[1] = 1
+
       for i = 1 to subMesh[curSM].numSubTextures - 1 do
         subMesh[curSM].dataBTRI.cornerStart[i + 1] = \
             subMesh[curSM].dataBTRI.cornerStart[i] + \
             subMesh[curSM].dataBTRI.cornerSpan[i]
     )
-    else if ((VersionOf version) > 22) then
+    else if (version > 2.2) then
     (
       for i = 1 to subMesh[curSM].numSubTextures do
       (
@@ -504,7 +521,7 @@ rollout ASPImport "ASP Import"
     local v, b, i, j, count    
 
     for v = 1 to subMesh[curSM].numVertices do (
-      subMesh[curSM].dataBVWL[v] = strBVWL bones:#() weights:#()
+      subMesh[curSM].dataBVWL[v] = strBVWL() 
     )
 
     for b = 1 to numBones do
@@ -545,7 +562,7 @@ rollout ASPImport "ASP Import"
     for i = 1 to subMesh[curSM].numStitches do
     (
       subMesh[curSM].dataSTCH[i] = strSTCH()
-      subMesh[curSM].dataSTCH[i].token = ReadLong fin
+      subMesh[curSM].dataSTCH[i].token = ReadFourCC fin
       subMesh[curSM].dataSTCH[i].vertexCount = ReadLong fin
       subMesh[curSM].dataSTCH[i].vertexIndex = #()
       for j = 1 to subMesh[curSM].dataSTCH[i].vertexCount do
@@ -574,13 +591,6 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do format "ok!\n"
-  )
-
-  struct strBoundingBox (
-      Name,
-      Position,
-      Orientation,
-      HalfDiag
   )
 
   fn ReadBBOX fin =
@@ -623,6 +633,7 @@ rollout ASPImport "ASP Import"
 
 
   fn ReadASP fin = (
+    curSM = 0
     legal = ReadBMSH fin
     while legal do
     (
@@ -649,76 +660,104 @@ rollout ASPImport "ASP Import"
 
   fn MakeMesh flipVcoord:false =
   (
-    local sm, i, j
+    local sm, i, j, p
 
     if (chk_Debug.checked) do format "debug: creating mesh..."
 
+    -- TODO: gather up the indexe points
+    --  build up the _index_ faces like we do for SNOs
     -- gather vertices
+    /*
     local meshVert = #()
-    for sm = 1 to numSubMeshes do
-      for i = 1 to subMesh[sm].numCorners do
+    for sm = 1 to numSubMeshes do (
+      for i = 1 to subMesh[sm].numCorners do (
         append meshVert ((FlipUp subMesh[sm].dataWCRN[i].pos) * 1000 * spn_Scale.value)
+      )
+    )
+    */
+    local meshVert = #()    
+    for sm = 1 to numSubMeshes do (
+      for p in subMesh[sm].dataBVTX do (
+        append meshVert (p * 1000 * spn_Scale.value)
+      )
+    )
 
     -- gather texture coordinates
     local meshTexc = #()
-    for sm = 1 to numSubMeshes do
+    for sm = 1 to numSubMeshes do (
+      local txcLookup = dataLookup.txc
       for i = 1 to subMesh[sm].numCorners do (
-        uvs = subMesh[sm].dataWCRN[i].txc
+        uvs = txcLookup[subMesh[sm].dataWCRN[i].txc]
         if (flipVcoord) then (
           uvs[2] = 1.0 - uvs[2]
         )
         append meshTexc uvs
       )
+    )
 
     -- gather faces
-    local meshFace = #()
+    --local meshFace = #()
     local cornOffset = 0
-    for sm = 1 to numSubMeshes do
-    (
+    local VertFaces = #()
+    local TexcFaces = #()  
+    local NrmlFaces = #()  
+    local MatiFaces = #() 
+ 
+    for sm = 1 to numSubMeshes do (
       local f = 1
-      for i = 1 to subMesh[sm].numSubTextures do
-      (
-        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do
-        (
-          local a = subMesh[sm].dataBTRI.cornerIndex[f].x + subMesh[sm].dataBTRI.cornerStart[i] + cornOffset - 1
-          local b = subMesh[sm].dataBTRI.cornerIndex[f].y + subMesh[sm].dataBTRI.cornerStart[i] + cornOffset - 1
-          local c = subMesh[sm].dataBTRI.cornerIndex[f].z + subMesh[sm].dataBTRI.cornerStart[i] + cornOffset - 1
-          append meshFace ([a,b,c] as point3)
+      WCRNs = subMesh[sm].dataWCRN
+      for i = 1 to subMesh[sm].numSubTextures do (
+        local startIndex = subMesh[sm].dataBTRI.cornerStart[i] + cornOffset
+        local matId = subMesh[sm].dataBSMM[i].textureIndex
+        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do (
+          local a = subMesh[sm].dataBTRI.cornerIndex[j].x + startIndex
+          local b = subMesh[sm].dataBTRI.cornerIndex[j].y + startIndex
+          local c = subMesh[sm].dataBTRI.cornerIndex[j].z + startIndex
+          local cA = WCRNs[a]
+          local cB = WCRNs[b]
+          local cC = WCRNs[c]	
+          VertFaces[f] = [cA.pos, cB.pos, cC.pos]
+          TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
+          NrmlFaces[f] = [cA.nrm, cB.nrm, cC.nrm]
+          MatiFaces[f] = matId  
           f += 1
         )
       )
       cornOffset += subMesh[sm].numCorners
     )
-
+/*
     -- gather material ids
     local meshMids = #()
     for sm = 1 to numSubMeshes do
       for i = 1 to subMesh[sm].numSubTextures do
         for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do
           append meshMids subMesh[sm].dataBSMM[i].textureIndex
+*/
 
     -- create mesh
     myMesh = Mesh \
              name:        nnkName  \
-             vertices:    meshVert \
-             faces:       meshFace \
-             materialIDs: meshMids \
-             tverts:      meshTexc
+             vertices:    dataLookup.pos \
+             faces:       VertFaces \
+             materialIDs: MatiFaces \
 
-    -- set normals
-    cornOffset = 0
-    for sm = 1 to numSubMeshes do
-    (
-      for i = 1 to subMesh[sm].numCorners do
-        setNormal myMesh (i + cornOffset) (FlipUp subMesh[sm].dataWCRN[i].nrm)
-      cornOffset += subMesh[sm].numCorners
+    -- Set the texture verts and faces
+    setNumTVerts myMesh dataLookup.txc.count 
+    for i = 1 to dataLookup.txc.count do setTVert myMesh i dataLookup.txc[i]
+    buildTVFaces myMesh
+    for i = 1 to TexcFaces.count do setTVFace myMesh i TexcFaces[i]             
+
+    update myMesh  
+    
+    local tools = (TopoTools      \
+      triObj:myMesh               \
+      faceCornerNormals:NrmlFaces \
+      faceCornerVerts:VertFaces
     )
 
-    -- set texture faces
-    buildTVFaces myMesh
-    for i = 1 to meshFace.count do
+    tools.RebuildSmoothing()
 
-      setTVFace myMesh i meshFace[i] -- tvfaces == faces
+    update myMesh
 
     if (chk_SeeThru.checked) do
       myMesh.xray = true
@@ -802,9 +841,28 @@ rollout ASPImport "ASP Import"
     return ([x, y, z] as Point3)
   )
 
+  local fiddlybits = #(
+    "_cheek",
+    "_chin",
+    "_eye",
+    "_forehead",
+    "_finger",
+    "_lowerlip",
+    "_upperlip"
+  )
+
+  fn IsSmallBone bone = (
+    for f in fiddlybits do (
+      if (findString bone.name f) != undefined then (
+        return true
+      )
+    )
+    return false
+  )
 
   fn MakeBones =
   (
+
     local i, j
 
     if (chk_Debug.checked) do format "debug: creating bones..."
@@ -887,17 +945,29 @@ rollout ASPImport "ASP Import"
       if (classOf b == BoneGeometry) do
       (
         -- bone length is guessed to be the average of the distances to its children
-        -- if it's a terminating bone, just guess the length to be 100
+        -- if it's a terminating bone, just guess the length
         if (b.children.count > 0) then
         (
           local distSum = 0
           for b2 in b.children do
             distSum += distance b.pos b2.pos
           b.length = distSum / b.children.count
+          if IsSmallBone b then (
+            b.width  = 6 * spn_Scale.value
+            b.height = 6 * spn_Scale.value            
+          )          
         )
         else
         (
-          b.length = 100
+          -- TODO: look up the bone name and figure out a good size for it
+          -- Probably just want to hide it put in a facial rig and what-have-you
+          if IsSmallBone b then (
+            b.width  = 4 * spn_Scale.value
+            b.height = 4 * spn_Scale.value 
+            b.length = 15 * spn_Scale.value                
+          ) else (
+            b.length = 100 * spn_Scale.value      
+          )
         )
       )
     )
@@ -957,7 +1027,10 @@ rollout ASPImport "ASP Import"
     if (aspHeader.mark != "BMSH") then (
       messageBox "This is not an ASP with a mesh"
       return false
-    )    
+    )  
+    
+    -- Create a lookup table for indexed corner data
+    dataLookup = strWCRN()
 
     if not (ReadASP fin) then (
       return false
@@ -966,13 +1039,30 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do (
       for sm = 1 to numSubMeshes do (
         format "SubMesh[%]:\n" sm
-        DumpMesh subMesh[sm]      
+        DumpData subMesh[sm]      
       )
     ) 
 
+    if chk_DebugVertList.checked then (
+      for sm = 1 to numSubMeshes do (
+        dbgMeshes = for v = 1 to subMesh[sm].dataBVTX.count collect (
+          pos = (FlipUp subMesh[sm].dataBVTX[v]) * 1000 * spn_Scale.value
+          Sphere radius:(5 * spn_Scale.value) segs:16 name:(v as string) pos:pos smooth:true wirecolor:(color 108 0 136)       
+        )
+      )
+    )   
+    
+    for sm = 1 to numSubMeshes do (
+      for v = 1 to subMesh[sm].numVertices do (
+        for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
+          subMesh[sm].dataWCRN[corner].pos = v
+        )          
+      )        
+    )    
+
     local isBrokenWorld = aspHeader.majorVersion == 5 and aspHeader.minorVersion == 1
 
-    MakeMesh flipVcoord:isBrokenWorld
+    MakeMesh flipVcoord:(isBrokenWorld or chk_FlipUV.checked)
 
     if (chk_Texture.checked and numTextures > 0) do
       MakeMaterial()

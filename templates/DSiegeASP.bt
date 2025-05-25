@@ -1,0 +1,363 @@
+//------------------------------------------------
+//--- 010 Editor v14.0 Binary Template
+//
+//      File: DSiegeASP.bt
+//   Authors: biddle
+//   Version: pre-alpha PoC
+//   Purpose: A template for Dungeon Siege Model files
+//  Category: Game
+// File Mask: *.asp
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+
+typedef struct {
+    float x, y, z;
+} VEC3;
+
+typedef struct {
+    float x, y, z, w;
+} QUAT;
+
+typedef struct {
+    float u, v;
+} UV;
+
+typedef struct {
+    unsigned char R,G,B,A;  // could be ABGR?
+} RGBA;
+
+/*
+enum ChunkIDs {
+
+	IDMeshHeader			= 0x48534D42,	// BMSH
+	IDSubMeshHeader			= 0x42555342,	// BSUB
+	IDVertList				= 0x58545642,	// BVTX
+	IDVertMap				= 0x504D5642,	// BVMP
+	IDBoneHeader			= 0x484E4F42,	// BONH
+	IDBoneNameList			= 0x4C4D4E42,	// BNML
+	IDBoneVertWeightList	= 0x4C575642,	// BVWL
+	IDCornerList			= 0x4E524342,	// BCRN
+	IDWCornerList			= 0x4E524357,	// WCRN
+	IDTriangleList			= 0x49525442,	// BTRI
+	IDSubMeshMaterial		= 0x4D4D5342,	// BSMM
+	IDStitchSet				= 'HCTS',		// STCH
+	IDBoundingBoxes			= 'XOBB',		// BBOX
+	IDMeshEndMarker			= 0x444E4542,	// BEND
+
+	IDRestPose				= 0x534f5052,	// RPOS
+};
+*/
+
+typedef char CHUNKID[4];
+  
+typedef struct sNeMaMesh_Chunk_Version_1_0 {
+
+	CHUNKID ChunkName;			// "BMSH"	// Boned Mesh
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	
+	DWORD StringTableSize;	
+	DWORD NumberOfBones;	
+	DWORD MaximumMaterials;	
+	DWORD MaximumVerts;
+	DWORD NumberOfSubMeshes;
+	DWORD MeshAttrFlags;
+	
+};
+
+typedef sNeMaMesh_Chunk_Version_1_0 sNeMaMesh_Chunk;
+    
+typedef struct sNeMaSubMesh_Chunk {
+
+	CHUNKID ChunkName;			// "BSUB"	// Sub Mesh variation
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	
+	DWORD SubMeshID;	
+	DWORD NumberOfSubMeshMaterials;	
+	DWORD NumberOfSubMeshVerts;
+	DWORD NumberOfSubMeshCorners;
+	DWORD NumberOfSubMeshTriangles;
+		
+};
+
+//** VERTS ***********************************************
+
+typedef struct sVertList_Chunk {
+	CHUNKID ChunkName;					// "BVTX"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	DWORD NumberOfVerts;
+};
+
+//** VERT MAPPINGS ***************************************
+
+typedef struct sVertMappingIndex_Chunk {
+    DWORD numVerts;
+    DWORD vertsInfluences[numVerts];
+};
+
+typedef struct sVertMapData_Chunk {
+	CHUNKID ChunkName;					// "BVMP"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+};
+
+
+//** BONES ***********************************************
+
+typedef struct sBoneHeader_Chunk {
+	CHUNKID ChunkName;			// "BONH"	// Bone Header
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+};
+
+string LookupString(DWORD offset) {    
+   return ReadString(Info.StringTableStart+offset);   
+}
+
+typedef struct {
+	DWORD BoneIndex;		
+	int   ParentBoneIndex;	
+	DWORD NameOffset;
+} sBoneInfo_Chunk <read=LookupString(NameOffset)>;
+
+// Vertex Weights indexed by Bone
+
+typedef struct sBoneVertData_Chunk {
+	CHUNKID ChunkName;			// "BVWL"	// Bone Vert Weight Data
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+};
+
+typedef struct sBoneVertWeightList_Chunk {
+	int	  NumberOfPairs;
+};
+
+// Bone Weights indexed by Vertex
+
+typedef struct sVertBoneData_Chunk {
+	CHUNKID ChunkName;			// "VBWL"	// Vert Bone Weight Data
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	int   NumberOfVerts;		// If NEGATIVE, indicates the primary bone (the one with 100% of the verts)
+};
+
+typedef struct sVertBoneWeightList_Chunk {
+	int NumberOfPairs;
+};
+
+//** CORNERS *************************************************
+
+typedef struct sCornerList_Chunk {
+	CHUNKID ChunkName;					// "BCRN" or "WCRN"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	DWORD NumberOfCorners;
+};
+
+typedef struct sCorner_Chunk {
+	DWORD     i;						// Index into vertex table
+	VEC3      normal;				    // Normal
+	RGBA      color;					// Color
+	RGBA      specular;					// Specular color, not currently used
+	UV        uv;						// Tex coordinate set
+};
+
+typedef struct sWeightedCorner_Chunk {
+	VEC3 v;						// Position
+	float w[4];          		// Bone weights
+	UBYTE b[4];                 // Bone indices
+	VEC3 n;						// Normal
+	RGBA color;				    // Color
+	UV uv;						// Texcoord
+};
+
+
+//** TRIANGLES ***********************************************
+
+typedef struct sTriangleList_Chunk {
+	CHUNKID ChunkName;			// "BTRI"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	DWORD NumberOfTriangles;
+};
+
+typedef struct sTriangle_Chunk {
+	DWORD CornerAIndex;
+	DWORD CornerBIndex;
+	DWORD CornerCIndex;
+};
+
+//** BONE REST POSITIONS ***********************************************
+
+typedef struct sRestPoseList_Chunk {
+	CHUNKID ChunkName;					// "RPOS"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	DWORD NumberOfBones;
+};
+
+typedef struct sRestPoseBoneData {
+	QUAT InvRotation;
+	VEC3 InvPosition;
+	QUAT Rotation;
+	VEC3 Position;
+};
+
+//** MATERIAL SUPPORT **************************************************
+
+typedef struct sSubMeshMaterial_Chunk {
+	CHUNKID ChunkName;					// "BSMM"
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+	DWORD NumberOfMaterials;
+};
+
+typedef struct sSubMeshMaterialData {
+	DWORD MaterialID;					
+	DWORD NumberOfFaces;					
+};
+
+//** STITCH LISTS *********************************************
+
+typedef struct sStitchSetHeader_Chunk {
+	CHUNKID ChunkName;					// "STCH"
+	UBYTE	MajorVersion;			
+	UBYTE	MinorVersion;			
+	WORD	ExtraVersion;	
+	DWORD	NumberOfSets;
+};
+
+typedef struct sStitchSet_Chunk {
+	CHUNKID	Tag;
+	DWORD	NumVerts;
+};
+
+//**==========================================================
+
+typedef struct sBoundingBox_Chunk {
+	CHUNKID ChunkName;                   // "BBOX"	
+	UBYTE	MajorVersion;			
+	UBYTE	MinorVersion;
+    WORD	ExtraVersion; 
+    DWORD   BoxCount; 
+    struct Box {
+        CHUNKID Name;
+        VEC3 Position;
+        QUAT Orientation;
+        VEC3 HalfDiag;
+    } Boxes[BoxCount];
+};
+
+typedef struct sEnd_Chunk {
+	CHUNKID ChunkName;                   // "BEND"			
+};
+
+
+typedef struct sInfoMark_Chunk {
+	CHUNKID ChunkName;                   // "INFO"			
+    DWORD NumStrings;
+    char Marker[8];
+};
+
+//**==========================================================
+
+struct ASP_Info {
+    sNeMaMesh_Chunk     Header;
+    local int64 StringTableStart = FTell();
+    char StringTable[Info.Header.StringTableSize];
+} Info;
+
+struct ASP_Skeleton {
+    sBoneHeader_Chunk   Header;
+    sBoneInfo_Chunk     bones[Info.Header.NumberOfBones];
+} Skeleton;
+
+struct ASP_SubMeshes {
+    
+    struct ASP_SubMesh {
+        sNeMaSubMesh_Chunk      Header;
+        
+        sSubMeshMaterial_Chunk  MaterialInfo;
+        sSubMeshMaterialData    Materials[MaterialInfo.NumberOfMaterials];
+        
+        sVertList_Chunk         VertListInfo;
+        VEC3                    Vertices[VertListInfo.NumberOfVerts];
+        
+        if ((Info.Header.MajorVersion < 1) || (Info.Header.MajorVersion == 1 && Info.Header.MinorVersion < 3)) {
+            sCornerList_Chunk   CornerListInfo;
+            sCorner_Chunk       Corners[CornerListInfo.NumberOfCorners];
+        } else {
+            if (Info.Header.MajorVersion < 4) {
+                sCornerList_Chunk   CornerListInfo;
+                sCorner_Chunk       Corners[CornerListInfo.NumberOfCorners];
+            }
+            sCornerList_Chunk       WCornerListInfo;
+            sWeightedCorner_Chunk   WCorners[WCornerListInfo.NumberOfCorners];
+            sVertMapData_Chunk      BoneVertMapInfo;
+            sVertMappingIndex_Chunk BoneVertMapping[VertListInfo.NumberOfVerts] <optimize=false>;        
+        }
+        
+        sTriangleList_Chunk     TriListInfo;
+     
+		if ((Info.Header.MajorVersion > 2) || (Info.Header.MajorVersion == 2 && Info.Header.MinorVersion >= 2)) {
+            struct {
+                DWORD start;
+                DWORD length;            
+            } TriListSections[MaterialInfo.NumberOfMaterials];
+        }
+        
+        sTriangle_Chunk         Triangles[TriListInfo.NumberOfTriangles];     
+        
+        sBoneVertData_Chunk     BoneVertDataInfo;
+        
+        // A rigid mesh will not have weights, just -1 or 0 for the index
+        // Need to figure out how to check for animation bones with no verts.
+        // Not sure if there were any like this exported.
+        if (Info.Header.NumberOfBones == 1) {
+            int ONLY_BONE;
+        }
+        else {
+            struct ASP_BoneWeights {
+                DWORD NumberOfPairs;
+                struct sBoneVertWeightPair { 
+                    DWORD index;
+                    float weight;
+                 } BoneVertWeights[NumberOfPairs] <optimize=false>;
+            } BoneWeightList[Info.Header.NumberOfBones] <optimize=false>;
+        }
+            
+        if (!((Info.Header.MajorVersion < 1) || (Info.Header.MajorVersion == 1 && Info.Header.MinorVersion < 4))) {            
+			sStitchSetHeader_Chunk StitchSetListInfo;      
+            struct {
+                sStitchSet_Chunk StitchSetInfo;
+                DWORD verts[StitchSetInfo.NumVerts];
+            } StitchSetList[StitchSetListInfo.NumberOfSets] <optimize=false>;
+        }
+        
+    } meshes[Info.Header.NumberOfSubMeshes] <optimize=false>;
+
+} MeshData;
+
+struct ASP_RestPose {
+    sRestPoseList_Chunk Header;
+    sRestPoseBoneData Bones[Header.NumberOfBones];
+} RestPose;
+
+sBoundingBox_Chunk BoundingBoxData;
+sEnd_Chunk EndMark;
+sInfoMark_Chunk InfoMark;
+

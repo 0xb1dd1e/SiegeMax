@@ -1,0 +1,168 @@
+//------------------------------------------------
+//--- 010 Editor v14.0 Binary Template
+//
+//      File: DSiegeSNO.bt
+//   Authors: biddle
+//   Version: pre-alpha PoC
+//   Purpose: A template for Dungeon Siege terrain files
+//  Category: Game
+// File Mask: *.sno
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+
+typedef struct {
+    float x, y, z;
+} VEC3;
+
+typedef struct {
+    float u, v;
+} UV;
+
+typedef struct {
+    unsigned char R,G,B,A;  // could be ABGR?
+} RGBA;
+
+typedef struct {
+    char    id[4];
+    UINT32  majorVersion; // DS1 is 7 ... need to investigate 8
+    UINT32  minorVersion;
+
+    UINT32  numDoors;
+    UINT32  numSpots;
+    UINT32  numCorners;
+    UINT32  numFaces;
+
+    UINT32  numSurfaces;
+
+    VEC3    minBBox;
+    VEC3    maxBBox;
+    VEC3    centroidOffset;
+
+    UINT8   isTiled;
+    UINT8   pad[3];
+
+    UINT32  reserved0;
+    UINT32  reserved1;
+    UINT32  reserved2;
+    
+} SNO_Header;
+
+typedef struct  {
+    DWORD   id;
+    VEC3    center;
+    VEC3    xAxis;
+    VEC3    yAxis;
+    VEC3    zAxis;
+    UINT32  numDoorVerts;
+    UINT32  doorVertIndices[numDoorVerts]; 
+} SNO_Door <optimize=false>; 
+
+typedef struct  {
+    VEC3    xAxis;
+    VEC3    yAxis;
+    VEC3    zAxis;
+    VEC3    center;
+    string  name;
+} SNO_Spot; 
+
+typedef struct {
+	VEC3    position;
+	VEC3    normal;
+	RGBA    color;
+	UV      uv;
+} SNO_Vertex;
+
+typedef struct {
+    string  texname;
+	UINT32  startIndex;
+	UINT32  numVerts;
+	UINT32  numVIndices;
+	UINT16  vIndices[numVIndices];
+} SNO_Stage <optimize=false>; 
+
+typedef struct {
+    UINT16 id;
+	VEC3   minBox;
+	VEC3   maxBox;
+	VEC3   center;    
+    UINT16 numTriangles;
+    UINT16 triangles[numTriangles];
+    UINT32 numLocalConnections;
+    if (numLocalConnections) {
+        UINT16 localConnections[numLocalConnections];
+    }
+} SNO_LeafInfo <optimize=false>; 
+
+typedef struct {
+    UINT16 localLeafId;
+    UINT16 farLeafId;
+} SNO_NodeLeafConnect;
+    
+typedef struct {
+    UINT8 farId;
+    UINT32 numNodalLeafConnections;
+    SNO_NodeLeafConnect nodallinks[numNodalLeafConnections];
+} SNO_NodalConnectInfo <optimize=false>; 
+
+
+typedef struct {
+	VEC3    vertices[3];
+	VEC3    faceNormal;
+} SNO_TriNorm;
+
+// The BSP is a recursive structure...
+struct SNO_BSPNode;
+typedef struct {
+    VEC3 min;
+    VEC3 max;
+    UINT8 isLeaf;
+    UINT16 numTriangles;
+    UINT16 triangles[numTriangles];
+    UINT8 children;
+    if (children!=0) {
+        SNO_BSPNode left;
+        SNO_BSPNode right;
+   }
+} SNO_BSPNode; 
+
+typedef struct {
+    uint8   id;
+    VEC3    minBox;
+    VEC3    maxBox;
+	UINT32  flags <format=hex>;
+    
+	UINT32 numLeafConnections;
+    if (numLeafConnections > 0) {
+    	SNO_LeafInfo leafConnections[numLeafConnections];
+    }
+    
+	UINT32 numNodeConnections;
+    if (numNodeConnections > 0) {
+    	SNO_NodalConnectInfo nodeConnections[numNodeConnections];
+    }
+    
+    UINT32 numTriangles;
+    if (numTriangles > 0) {    
+        SNO_TriNorm triangles[numTriangles];
+    }
+    
+    SNO_BSPNode bsp;
+  
+} SNO_LogicalNode <optimize=false>; 
+      
+/// Header and geo
+SNO_Header  header;
+UINT32      checksum;
+SNO_Door    doors[header.numDoors];
+
+if (header.numSpots) {
+    SNO_Spot spots[header.numSpots];
+}
+
+SNO_Vertex  corners[header.numCorners];
+SNO_Stage   surfaces[header.numSurfaces];
+
+/// Pathing and BSP info (walkable/water/floor flags)
+UINT32      numLogicalNodes;
+SNO_LogicalNode logicalNodes[numLogicalNodes];
