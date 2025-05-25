@@ -81,7 +81,7 @@ rollout ASPImport "ASP Import"
 
   local dbgMeshes
 
-  -- Keep lookup tabls of all corner attributes
+  -- Keep lookup tables of all corner attributes
   local dataBLookup
   local dataWLookup
 
@@ -99,26 +99,33 @@ rollout ASPImport "ASP Import"
   )
   button btn_ImportNow "Import..." width:100
 
-  fn DumpData subMesh = (
-
-    fn DumpList lst cutoff = (
-      for v = 1 to lst.count do (
-        if (v <= cutoff or v > lst.count-cutoff) then (
-          format "  %: %\n" v lst[v]
+  fn DumpData subMesh sm = (
+    
+    fn DumpList lst cutoff:3 first:1 count:undefined = ( 
+      if count == undefined then (
+        count = lst.count
+      ) 
+      for v = 0 to count-1 do (
+        if (v < cutoff or v >= count-cutoff) then (
+          format "    %: %\n" (first+v) lst[first+v]
         )
-        else if (v == (cutoff+1) and lst.count > (cutoff*2)) then (
-          format "     ...\n"
+        else if (v == (cutoff+1) and count > (cutoff*2)) then (
+          format "        ...\n"
         )         
       )        
     )
 
-    format "submesh[%]:\n" subMesh.id
 
-    format " maxSubTextures % \n" subMesh.maxSubTextures
-    format " numVertices    % \n" subMesh.numVertices
-    format " numCorners     % \n" subMesh.numCorners
-    format " numFaces       % \n" subMesh.numFaces
-    format " numStitches    % \n" subMesh.numStitches
+    format "===========================================================\n" subMesh.id
+    format "SubMesh[%]:\n" sm
+
+    format "submesh ID      %\n" subMesh.id
+
+    format " maxSubTextures %\n" subMesh.maxSubTextures
+    format " numVertices    %\n" subMesh.numVertices
+    format " numCorners     %\n" subMesh.numCorners
+    format " numFaces       %\n" subMesh.numFaces
+    format " numStitches    %\n" subMesh.numStitches
 
     format " dataBSMM:\n"
     for m in subMesh.dataBSMM do (
@@ -126,22 +133,32 @@ rollout ASPImport "ASP Import"
     )
 
     format " dataBVTX:\n"
-    DumpList subMesh.dataBVTX 3
+    DumpList subMesh.dataBVTX
 
-    format " dataBCRN       % \n" subMesh.dataBCRN
+    format " dataBCRN       %\n" subMesh.dataBCRN
 
     format " dataWCRN:\n"
-    DumpList subMesh.dataWCRN 3 
+    DumpList subMesh.dataWCRN 
 
     format " dataBVMP:\n"
-    DumpList subMesh.dataBVMP 3 
+    DumpList subMesh.dataBVMP
 
-    format " dataBTRI: % \n" subMesh.dataBTRI -- list of lists
+    format " dataBTRI:\n" 
+    format "  % submeshes\n" subMesh.dataBTRI.cornerStart.count
+    local firstFace = 1
+    for i = 1 to subMesh.dataBTRI.cornerStart.count do (
+      format "  trilist[%]:\n"  i
+      format "   cornerStart: % \n" subMesh.dataBTRI.cornerStart[i]
+      format "   cornerSpan:  % \n" subMesh.dataBTRI.cornerSpan[i]
+      format "   tris:\n"
+      DumpList subMesh.dataBTRI.cornerIndex first:firstFace count:subMesh.dataBSMM[i].numberOfFaces
+      firstFace += subMesh.dataBSMM[i].numberOfFaces
+    )
 
     format " dataBVWL:\n"
-    DumpList subMesh.dataBVWL 3   
+    DumpList subMesh.dataBVWL   
     
-    format " dataSTCH       % \n" subMesh.dataSTCH
+    format " dataSTCH       %\n" subMesh.dataSTCH
 
     format " dataBLookup table sizes\n"
     format "    pos %\n" dataBLookup.pos.count
@@ -152,6 +169,8 @@ rollout ASPImport "ASP Import"
     format "    pos %\n" dataWLookup.pos.count
     format "    txc %\n" dataWLookup.txc.count
     format "    nrm %\n" dataWLookup.nrm.count
+
+    format "===========================================================\n" subMesh.id
 
   )
 
@@ -276,11 +295,17 @@ rollout ASPImport "ASP Import"
   
   fn fetchIndex itms val addIfMissing:true = (
     i = findItem itms val
-    if i == 0 and addIfMissing then (
-      append itms val
-      i = itms.count
+    if i > 0 then (
+      return i
     )
-    return i
+    else if addIfMissing then (
+      append itms val
+      return itms.count
+    )
+    else (
+      format "ERROR! Can't find item % in table %" val itms
+    )
+    return 0
   )
 
   fn ReadBMSH fin = (
@@ -415,21 +440,8 @@ rollout ASPImport "ASP Import"
     for i = 1 to subMesh[curSM].numCorners do (
       append subMesh[curSM].dataBCRN (ReadBCorner fin dataBLookup)
     )
-/*
-    subMesh[curSM].dataBCRN = #()
-    for i = 1 to subMesh[curSM].numCorners do
-    (
-      local bvtxIndex = ReadLong fin
-      local p = subMesh[curSM].dataBVTX[bvtxIndex]
-      local n = ReadVector fin
-      local c = ReadFourBB fin
-      local unk0 = ReadLong fin
-      local t = ReadCoord fin
-      subMesh[curSM].dataBCRN[i] = strBCRN pos:p nrm:n col:c txc:t
-    )
-*/      
+    
     if (chk_Debug.checked) do format "ok!\n"     
-
     --format "After ReadBCRN SubMesh[%]:\n" curSM
     --DumpData subMesh[curSM]           
   )
@@ -437,11 +449,7 @@ rollout ASPImport "ASP Import"
   fn ReadWCorner fin FixOffByOne lookup =
   (
     local p, w, b, n, c, u
-
-    -- Discard the postion value in the WCRN
-    (ReadVector fin)
-    --p = fetchIndex lookup.pos (ReadVector fin)
-
+    p = fetchIndex lookup.pos (ReadVector fin)
     w = (ReadFourFF fin)
     b = ((if FixOffByOne then ReadFourBB else ReadFourBB2) fin)   
     n = fetchIndex lookup.nrm (ReadNormal fin)
@@ -556,8 +564,8 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do format "ok!\n"
 
-    format "After ReadBTRI SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM] 
+    --format "After ReadBTRI SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM] 
   )
 
   fn ReadBVWL fin = (
@@ -723,6 +731,7 @@ rollout ASPImport "ASP Import"
     for sm = 1 to numSubMeshes do (
       local f = 1
       WCRNs = subMesh[sm].dataWCRN
+      format "\nyou have % WCRNs to read from" WCRNs.count
       --BVTXs = subMesh[sm].dataBVTX
       for i = 1 to subMesh[sm].dataBSMM.count do (
         local subMeshMat = subMesh[sm].dataBSMM[i]
@@ -730,12 +739,15 @@ rollout ASPImport "ASP Import"
         local startIndex = subMesh[sm].dataBTRI.cornerStart[i] + 1
         for j = 1 to subMeshMat.numberOfFaces do (
           local face = subMesh[sm].dataBTRI.cornerIndex[j]
-          local wa = face.x + startIndex - subMeshOffset
-          local wb = face.y + startIndex - subMeshOffset
-          local wc = face.z + startIndex - subMeshOffset
-          local cA = WCRNs[wa]
-          local cB = WCRNs[wb]
-          local cC = WCRNs[wc]	
+          local wA = face.x + startIndex
+          local wB = face.y + startIndex
+          local wC = face.z + startIndex
+          if (wA > WCRNs.count) then throw ("yer A is hooped " + (wA as string))
+          if (wB > WCRNs.count) then throw ("yer B is hooped " + (wB as string))
+          if (wC > WCRNs.count) then throw ("yer C is hooped " + (wC as string))
+          local cA = WCRNs[wA]
+          local cB = WCRNs[wB]
+          local cC = WCRNs[wC]	
           --VertFaces[f] = [BVTXs[cA.pos], BVTXs[cB.pos], BVTXs[cC.pos]]
           VertFaces[f] = [cA.pos, cB.pos, cC.pos]
           TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
@@ -1085,8 +1097,7 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do (
       for sm = 1 to numSubMeshes do (
-        format "SubMesh[%]:\n" sm
-        DumpData subMesh[sm]      
+        DumpData subMesh[sm] sm
       )
     ) 
 
@@ -1102,6 +1113,9 @@ rollout ASPImport "ASP Import"
     for sm = 1 to numSubMeshes do (
       for v = 1 to  subMesh[sm].dataBVMP.count do (
         for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
+          --actual = subMesh[sm].dataBVTX[v]
+          --if actual == undefined then messagebox ("prob! sm:" + (sm as string) + " v:"+ (v as string))
+          --format "%: w[%] % <-- v[%] %\n" sm (corner+1) subMesh[sm].dataWCRN[corner+1].pos v subMesh[sm].dataBVTX[v]
           subMesh[sm].dataWCRN[corner+1].pos = subMesh[sm].dataBVTX[v]
         )          
       )        
