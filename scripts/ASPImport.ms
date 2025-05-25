@@ -43,7 +43,7 @@ rollout ASPImport "ASP Import"
   struct strWCRN  ( pos=#(), weight=#(), bone=#(), nrm=#(), col=#(), txc=#(), opp=#() )
 
   struct strSubMesh ( id = -1, 
-                      numSubTextures = 0,
+                      maxSubTextures = 0,
                       numVertices = 0,
                       numCorners = 0,
                       numFaces = 0,
@@ -114,7 +114,7 @@ rollout ASPImport "ASP Import"
 
     format "submesh[%]:\n" subMesh.id
 
-    format " numSubTextures % \n" subMesh.numSubTextures
+    format " maxSubTextures % \n" subMesh.maxSubTextures
     format " numVertices    % \n" subMesh.numVertices
     format " numCorners     % \n" subMesh.numCorners
     format " numFaces       % \n" subMesh.numFaces
@@ -347,26 +347,27 @@ rollout ASPImport "ASP Import"
     subMesh[curSM].dataBSMM = materials
     if (chk_Debug.checked) do format "ok!\n" 
 
-    format "After ReadBSMM SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM]          
+    --format "After ReadBSMM SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM]          
   )
 
   fn ReadBSUB fin = (
-
-    if (chk_Debug.checked) do  format "debug: reading BSUB section..."
-
+    
     curSM  += 1
+
+    if (chk_Debug.checked) do  format "debug: reading BSUB section for % ..." curSM
+
     subMesh[curSM] = strSubMesh()
     subMesh[curSM].id = (ReadLong fin #unsigned)
-    subMesh[curSM].numSubTextures = (ReadLong fin #unsigned)
+    subMesh[curSM].maxSubTextures = (ReadLong fin #unsigned)
     subMesh[curSM].numVertices = (ReadLong fin #unsigned)
     subMesh[curSM].numCorners = (ReadLong fin #unsigned)
     subMesh[curSM].numFaces = (ReadLong fin #unsigned)
 
     if (chk_Debug.checked) do format "ok!\n"    
     
-    format "After ReadBSUB SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM]      
+    --format "After ReadBSUB SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM]      
   )
 
   fn ReadBVTX fin = (
@@ -385,8 +386,8 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do format "ok!\n"
 
-    format "After ReadBVTX SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM]  
+    --format "After ReadBVTX SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM]  
 
     return true              
   )
@@ -429,8 +430,8 @@ rollout ASPImport "ASP Import"
 */      
     if (chk_Debug.checked) do format "ok!\n"     
 
-    format "After ReadBCRN SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM]           
+    --format "After ReadBCRN SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM]           
   )
 
   fn ReadWCorner fin FixOffByOne lookup =
@@ -463,8 +464,8 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do format "ok!\n" 
 
-    format "After ReadWCRN SubMesh[%]:\n" curSM
-    DumpData subMesh[curSM]    
+    --format "After ReadWCRN SubMesh[%]:\n" curSM
+    --DumpData subMesh[curSM]    
   )
 
 
@@ -505,7 +506,8 @@ rollout ASPImport "ASP Import"
 
     if not UseAncientLayout then
     (
-      for i = 1 to subMesh[curSM].numSubTextures do
+      
+      for i = 1 to subMesh[curSM].dataBSMM.count do
       (
         subMesh[curSM].dataBTRI.cornerStart[i] = ReadLong fin
         subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
@@ -545,8 +547,7 @@ rollout ASPImport "ASP Import"
 */
     -- read data
     subMesh[curSM].dataBTRI.cornerIndex = #()
-    for i = 1 to subMesh[curSM].numFaces do
-    (
+    for i = 1 to subMesh[curSM].numFaces do (
       local a = (ReadLong fin)
       local b = (ReadLong fin)
       local c = (ReadLong fin)
@@ -555,8 +556,9 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do format "ok!\n"
 
+    format "After ReadBTRI SubMesh[%]:\n" curSM
+    DumpData subMesh[curSM] 
   )
-
 
   fn ReadBVWL fin = (
     if (chk_Debug.checked) do format "debug: reading BVWL section..."
@@ -567,8 +569,7 @@ rollout ASPImport "ASP Import"
       subMesh[curSM].dataBVWL[v] = strBVWL() 
     )
 
-    for b = 1 to numBones do
-    (
+    for b = 1 to numBones do (
       count = ReadLong fin
       if count < 0 and b == numBones then (
         -- We could have a number of bones, only with a rigid 
@@ -590,12 +591,10 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do format "ok!\n"
-
   )
 
 
-  fn ReadSTCH fin =
-  (
+  fn ReadSTCH fin = (
     if (chk_Debug.checked) do format "debug: reading STCH section..."
 
     subMesh[curSM].numStitches = ReadLong fin
@@ -694,7 +693,11 @@ rollout ASPImport "ASP Import"
       else if (header.mark == "WCRN") then (ReadWCRN fin (header.majorVersion < 5)) 
       else if (header.mark == "BTRI") then (ReadBTRI fin) -- TODO: check version for ancient tri list layouts
       else if (header.mark == "BEND") then (ReadBEND fin; exit)
-      else legal = false
+      else (
+        format "Unexpected header mark '%'\n" header
+        messagebox ("Unexpected header mark: " + (header as string))
+        legal = false
+      ) 
     )
 
     return legal
@@ -711,7 +714,7 @@ rollout ASPImport "ASP Import"
     local meshVerts = for p in dataWLookup.pos collect ((FlipUp p) * 1000 * spn_Scale.value)
 
     -- gather faces
-    local cornOffset = 1
+    local subMeshOffset = 0
     local VertFaces = #()
     local TexcFaces = #()  
     local NrmlFaces = #()  
@@ -721,13 +724,15 @@ rollout ASPImport "ASP Import"
       local f = 1
       WCRNs = subMesh[sm].dataWCRN
       --BVTXs = subMesh[sm].dataBVTX
-      for i = 1 to subMesh[sm].numSubTextures do (
-        local startIndex = subMesh[sm].dataBTRI.cornerStart[i] + cornOffset
-        local matId = subMesh[sm].dataBSMM[i].textureIndex
-        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do (
-          local wa = subMesh[sm].dataBTRI.cornerIndex[j].x + startIndex
-          local wb = subMesh[sm].dataBTRI.cornerIndex[j].y + startIndex
-          local wc = subMesh[sm].dataBTRI.cornerIndex[j].z + startIndex
+      for i = 1 to subMesh[sm].dataBSMM.count do (
+        local subMeshMat = subMesh[sm].dataBSMM[i]
+        local matId = subMeshMat.textureIndex
+        local startIndex = subMesh[sm].dataBTRI.cornerStart[i] + 1
+        for j = 1 to subMeshMat.numberOfFaces do (
+          local face = subMesh[sm].dataBTRI.cornerIndex[j]
+          local wa = face.x + startIndex - subMeshOffset
+          local wb = face.y + startIndex - subMeshOffset
+          local wc = face.z + startIndex - subMeshOffset
           local cA = WCRNs[wa]
           local cB = WCRNs[wb]
           local cC = WCRNs[wc]	
@@ -747,7 +752,7 @@ rollout ASPImport "ASP Import"
           f += 1
         )
       )
-      cornOffset += subMesh[sm].numCorners
+      subMeshOffset += subMesh[sm].numCorners
     )
 
     /*
@@ -775,7 +780,7 @@ rollout ASPImport "ASP Import"
     -- create mesh
     myMesh = Mesh \
              name:        nnkName  \
-             vertices:    meshVerts \ -- dataWLookup.pos \
+             vertices:    meshVerts \
              faces:       VertFaces \
              materialIDs: MatiFaces 
 
