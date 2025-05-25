@@ -729,8 +729,9 @@ rollout ASPImport "ASP Import"
     local NrmlFaces = #()  
     local MatiFaces = #() 
  
-    for sm = 1 to numSubMeshes do (
-      local f = 1
+    local f = 1
+
+    for sm = 1 to 1 do ( -- numSubMeshes do (
       WCRNs = subMesh[sm].dataWCRN
       format "\nyou have % WCRNs to read from" WCRNs.count
       --BVTXs = subMesh[sm].dataBVTX
@@ -738,11 +739,12 @@ rollout ASPImport "ASP Import"
       for i = 1 to subMesh[sm].dataBSMM.count do (
         local subMeshMat = subMesh[sm].dataBSMM[i]
         local matId = subMeshMat.textureIndex
+        local cornerStart = subMesh[sm].dataBTRI.cornerStart[i] + 1
         for j = 1 to subMeshMat.numberOfFaces do (
           local face = subMesh[sm].dataBTRI.cornerIndex[startIndex + j]
-          local wA = face.x + 1
-          local wB = face.y + 1
-          local wC = face.z + 1
+          local wA = face.x + cornerStart
+          local wB = face.y + cornerStart
+          local wC = face.z + cornerStart
           if (wA > WCRNs.count) then throw ("yer A is hooped " + (wA as string))
           if (wB > WCRNs.count) then throw ("yer B is hooped " + (wB as string))
           if (wC > WCRNs.count) then throw ("yer C is hooped " + (wC as string))
