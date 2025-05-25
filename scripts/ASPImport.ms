@@ -8,6 +8,7 @@
 --
 --  5/23/2025 biddle - Added support for 5.1 version (DS2BW)
 --  5/24/2025 biddle - Optimize faces and add smoothing groups
+--  5/25/2025 biddle - Sort out triangle sub-ranges
 --
 -------------------------------------------------------------------------------------------
 
@@ -20,7 +21,7 @@ rollout ASPImport "ASP Import"
   local V1_3   -- introduced WCRN section
   local V2_0   -- introduced STCH section
   local V2_1   -- introduced BBOX section
-  local V2_2
+  local V2_2   -- introduced SubMesh optimization
   local V2_3
   local V2_4
   local V2_5
@@ -85,17 +86,17 @@ rollout ASPImport "ASP Import"
   local dataBLookup
   local dataWLookup
 
-  group "Options"
-  (
+  group "Options" (
     spinner spn_Scale "Scale:" range:[0.0001,1000.0,1.0] type:#float scale:0.01
-    checkbox chk_Texture "Texture Mesh" checked:false
-    checkbox chk_Bone "Bone Mesh" checked:false
-    checkbox chk_Skin "Skin Mesh" checked:false
+    checkbox chk_Texture "Texture Mesh" checked:true
+    checkbox chk_Bone "Bone Mesh" checked:true
+    checkbox chk_Skin "Skin Mesh" checked:true
     checkbox chk_FlipUV "Flip UV" checked:false
     checkbox chk_BoneBall "Bones As Balls" checked:false
     checkbox chk_SeeThru "See Thru Mesh" checked:false
     checkbox chk_Debug "Show Debug Info" checked:true
     checkbox chk_DebugVertList "Debug Vert List" checked:false
+    width:200
   )
   button btn_ImportNow "Import..." width:100
 
@@ -500,7 +501,7 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "ok!\n" 
   )
 
-  fn ReadBTRI fin UseAncientLayout:false = (
+  fn ReadBTRI fin SupportSubMeshRanges = (
     if (chk_Debug.checked) do
       format "debug: reading BTRI section..."
 
@@ -513,47 +514,17 @@ rollout ASPImport "ASP Import"
     subMesh[curSM].dataBTRI.cornerStart = #()
     subMesh[curSM].dataBTRI.cornerSpan = #()
 
-    if not UseAncientLayout then
-    (
-      
-      for i = 1 to subMesh[curSM].dataBSMM.count do
-      (
+    for i = 1 to subMesh[curSM].dataBSMM.count do (
+      if SupportSubMeshRanges then ( 
         subMesh[curSM].dataBTRI.cornerStart[i] = ReadLong fin
         subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
       )
-    )    
-/*    
-    -- TODO: track down Ancient Triangle/Face examples
-
-    if (version == 2.2) then
-    (
-      for i = 1 to subMesh[curSM].numSubTextures do
-        subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
-
-      subMesh[curSM].dataBTRI.cornerStart[1] = 1
-
-      for i = 1 to subMesh[curSM].numSubTextures - 1 do
-        subMesh[curSM].dataBTRI.cornerStart[i + 1] = \
-            subMesh[curSM].dataBTRI.cornerStart[i] + \
-            subMesh[curSM].dataBTRI.cornerSpan[i]
-    )
-    else if (version > 2.2) then
-    (
-      for i = 1 to subMesh[curSM].numSubTextures do
-      (
-        subMesh[curSM].dataBTRI.cornerStart[i] = (ReadLong fin) + 1
-        subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
-      )
-    )
-    else
-    (
-      for i = 1 to subMesh[curSM].numSubTextures do
-      (
-        subMesh[curSM].dataBTRI.cornerStart[i] = 1
+      else (
+        subMesh[curSM].dataBTRI.cornerStart[i] = 0
         subMesh[curSM].dataBTRI.cornerSpan[i] = subMesh[curSM].numCorners
       )
     )
-*/
+
     -- read data
     subMesh[curSM].dataBTRI.cornerIndex = #()
     for i = 1 to subMesh[curSM].numFaces do (
@@ -699,8 +670,12 @@ rollout ASPImport "ASP Import"
       else if (header.mark == "STCH") then (ReadSTCH fin)
       else if (header.mark == "RPOS") then (ReadRPOS fin)
       else if (header.mark == "BBOX") then (ReadBBOX fin)
-      else if (header.mark == "WCRN") then (ReadWCRN fin (header.majorVersion < 5)) 
-      else if (header.mark == "BTRI") then (ReadBTRI fin) -- TODO: check version for ancient tri list layouts
+      else if (header.mark == "WCRN") then (
+        ReadWCRN fin (header.majorVersion < 5)
+      ) 
+      else if (header.mark == "BTRI") then (
+        ReadBTRI fin ((header.majorVersion > 2) or (header.majorVersion == 2 and header.minorVersion >= 2))
+      )    
       else if (header.mark == "BEND") then (ReadBEND fin; exit)
       else (
         format "Unexpected header mark '%'\n" header
@@ -708,7 +683,6 @@ rollout ASPImport "ASP Import"
         legal = false
       ) 
     )
-
     return legal
   )
 
@@ -723,67 +697,31 @@ rollout ASPImport "ASP Import"
     local meshVerts = for p in dataWLookup.pos collect ((FlipUp p) * 1000 * spn_Scale.value)
 
     -- gather faces
-    local subMeshOffset = 0
     local VertFaces = #()
     local TexcFaces = #()  
     local NrmlFaces = #()  
     local MatiFaces = #() 
  
-    local f = 1
-
-    for sm = 1 to 1 do ( -- numSubMeshes do (
+    for sm = 1 to numSubMeshes do (
       WCRNs = subMesh[sm].dataWCRN
-      format "\nyou have % WCRNs to read from" WCRNs.count
-      --BVTXs = subMesh[sm].dataBVTX
       local startIndex = 0;
       for i = 1 to subMesh[sm].dataBSMM.count do (
         local subMeshMat = subMesh[sm].dataBSMM[i]
-        local matId = subMeshMat.textureIndex
+        local matId = subMeshMat.textureIndex + 1
         local cornerStart = subMesh[sm].dataBTRI.cornerStart[i] + 1
         for j = 1 to subMeshMat.numberOfFaces do (
           local face = subMesh[sm].dataBTRI.cornerIndex[startIndex + j]
-          local wA = face.x + cornerStart
-          local wB = face.y + cornerStart
-          local wC = face.z + cornerStart
-          if (wA > WCRNs.count) then throw ("yer A is hooped " + (wA as string))
-          if (wB > WCRNs.count) then throw ("yer B is hooped " + (wB as string))
-          if (wC > WCRNs.count) then throw ("yer C is hooped " + (wC as string))
-          local cA = WCRNs[wA]
-          local cB = WCRNs[wB]
-          local cC = WCRNs[wC]	
-          --VertFaces[f] = [BVTXs[cA.pos], BVTXs[cB.pos], BVTXs[cC.pos]]
-          VertFaces[f] = [cA.pos, cB.pos, cC.pos]
-          TexcFaces[f] = [cA.txc, cB.txc, cC.txc]
-          NrmlFaces[f] = [cA.nrm, cB.nrm, cC.nrm]
-          MatiFaces[f] = matId 
-          f += 1
+          local cA = WCRNs[face.x + cornerStart]
+          local cB = WCRNs[face.y + cornerStart]
+          local cC = WCRNs[face.z + cornerStart]	
+          append VertFaces [cA.pos, cB.pos, cC.pos]
+          append TexcFaces [cA.txc, cB.txc, cC.txc]
+          append NrmlFaces [cA.nrm, cB.nrm, cC.nrm]
+          append MatiFaces matId 
         )
         startIndex += subMeshMat.numberOfFaces
       )
-      subMeshOffset += subMesh[sm].numCorners
     )
-
-    /*
-    local sweetVerts = dataWLookup.pos
-    format "Yer % sweeties: %n" sweetVerts.count sweetVerts
-    for face in VertFaces do (
-      if face.x > sweetVerts.count or face.y > sweetVerts.count or face.z > sweetVerts.count then (
-        format "bad % %\n" face sweetVerts.count
-      ) 
-      else (
-        format "% x:% y:% z:%\n" face dataWLookup.pos[face.x] dataWLookup.pos[face.y] dataWLookup.pos[face.z]
-      )
-    )*/
-
-    messagebox "Let's rock!"
-/*
-    -- gather material ids
-    local meshMids = #()
-    for sm = 1 to numSubMeshes do
-      for i = 1 to subMesh[sm].numSubTextures do
-        for j = 1 to subMesh[sm].dataBSMM[i].numberOfFaces do
-          append meshMids subMesh[sm].dataBSMM[i].textureIndex
-*/
 
     -- create mesh
     myMesh = Mesh \
@@ -792,17 +730,20 @@ rollout ASPImport "ASP Import"
              faces:       VertFaces \
              materialIDs: MatiFaces 
 
-    messagebox "Got milk?"
-
     -- Set the texture verts and faces
     setNumTVerts myMesh dataWLookup.txc.count 
-    for i = 1 to dataWLookup.txc.count do setTVert myMesh i dataWLookup.txc[i]
+    for i = 1 to dataWLookup.txc.count do (
+      uv = dataWLookup.txc[i]
+      if (flipVcoord) then (
+        uv.y = 1-uv.y
+      )
+      setTVert myMesh i uv
+    )
     buildTVFaces myMesh
     for i = 1 to TexcFaces.count do setTVFace myMesh i TexcFaces[i]             
 
     update myMesh  
-
-    
+ 
     local tools = (TopoTools      \
       triObj:myMesh               \
       faceCornerNormals:NrmlFaces \
@@ -1055,16 +996,12 @@ rollout ASPImport "ASP Import"
     -- set vertex weights
     local cornOffset = 0
 
-    with redraw off
-      for sm = 1 to numSubMeshes do (
-        for v = 1 to subMesh[sm].numVertices do (
+    with redraw off (
+        for v = 1 to dataWLookup.pos.count do (
           local wl = subMesh[sm].dataBVWL[v]
-          --for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
-          --	skinOps.ReplaceVertexWeights mySkin corner wl.bones wl.weights
-          --)    
-          skinOps.ReplaceVertexWeights mySkin v wl.bones wl.weights
-		    )        
+          skinOps.ReplaceVertexWeights mySkin v wl.bones wl.weights      
       )
+    )
 
     subObjectLevel = 0
     deselect $
@@ -1109,9 +1046,6 @@ rollout ASPImport "ASP Import"
     for sm = 1 to numSubMeshes do (
       for v = 1 to  subMesh[sm].dataBVMP.count do (
         for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
-          --actual = subMesh[sm].dataBVTX[v]
-          --if actual == undefined then messagebox ("prob! sm:" + (sm as string) + " v:"+ (v as string))
-          --format "%: w[%] % <-- v[%] %\n" sm (corner+1) subMesh[sm].dataWCRN[corner+1].pos v subMesh[sm].dataBVTX[v]
           subMesh[sm].dataWCRN[corner+1].pos = subMesh[sm].dataBVTX[v]
         )          
       )        
