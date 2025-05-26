@@ -1,6 +1,6 @@
 struct TopoTools (
 
-  triObj,
+  triObj = undefined,
   faceCornerNormals = #(), -- the normal indices each face corner
   faceCornerVerts = #(), -- the vertex indices each face corner
 

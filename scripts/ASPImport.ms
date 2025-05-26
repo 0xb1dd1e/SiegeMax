@@ -8,7 +8,7 @@
 --
 --  5/23/2025 biddle - Added support for 5.1 version (DS2BW)
 --  5/24/2025 biddle - Optimize faces and add smoothing groups
---  5/25/2025 biddle - Sort out triangle sub-ranges
+--  5/25/2025 biddle - Sort out D3D indexed sub-ranges, optimization, skinning
 --
 -------------------------------------------------------------------------------------------
 
@@ -21,14 +21,14 @@ rollout ASPImport "ASP Import"
   local V1_3   -- introduced WCRN section
   local V2_0   -- introduced STCH section
   local V2_1   -- introduced BBOX section
-  local V2_2   -- introduced SubMesh optimization
+  local V2_2   -- introduced D3D indexed sub-range optimization
   local V2_3
   local V2_4
   local V2_5
   local V4_0   -- introduced with Siege Max (DS1)
   local V4_1
-  local v5_0   -- DS LoA 
-  local v5_1   -- DS2 BW
+  local v5_0   -- DS LoA (DS2?)
+  local v5_1   -- DS2 BW (DDS flips)
 */
 
   struct strChunkHeader  ( mark = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0 )
@@ -36,7 +36,7 @@ rollout ASPImport "ASP Import"
   struct strBSMM ( textureIndex, numberOfFaces )
   struct strBVMP ( count, cornersInfluenced=#() )
   struct strBTRI ( cornerStart, cornerSpan, cornerIndex )
-  struct strBVWL ( bones=#(), weights=#() )
+  struct strBVWL ( boneIds=#(), weights=#() )
   struct strSTCH ( token, vertexCount, vertexIndex )
   struct strRPOS ( invRot, invPos, rot, pos )
 
@@ -89,18 +89,19 @@ rollout ASPImport "ASP Import"
   group "Options" (
     spinner spn_Scale "Scale:" range:[0.0001,1000.0,1.0] type:#float scale:0.01
     checkbox chk_Texture "Texture Mesh" checked:true
+    checkbox chk_SetSmoothingGroups "Set Smoothing Groups" checked:true   
     checkbox chk_Bone "Bone Mesh" checked:true
     checkbox chk_Skin "Skin Mesh" checked:true
     checkbox chk_FlipUV "Flip UV" checked:false
     checkbox chk_BoneBall "Bones As Balls" checked:false
     checkbox chk_SeeThru "See Thru Mesh" checked:false
-    checkbox chk_Debug "Show Debug Info" checked:true
+    checkbox chk_Debug "Show Debug Info" checked:false
     checkbox chk_DebugVertList "Debug Vert List" checked:false
     width:200
   )
   button btn_ImportNow "Import..." width:100
 
-  fn DumpData subMesh sm = (
+  fn DumpData subMesh smi = (
     
     fn DumpList lst cutoff:3 first:1 count:undefined = ( 
       if count == undefined then (
@@ -118,7 +119,7 @@ rollout ASPImport "ASP Import"
 
 
     format "===========================================================\n" subMesh.id
-    format "SubMesh[%]:\n" sm
+    format "SubMesh[%]:\n" smi
 
     format "submesh ID      %\n" subMesh.id
 
@@ -176,48 +177,37 @@ rollout ASPImport "ASP Import"
 
   )
 
-  fn FlipUp v =
-  (
+  fn FlipUp v = (
     return ([v.x,-v.z,v.y] as point3)
   )
 
 
-  fn FlipUpQuat q =
-  (
+  fn FlipUpQuat q = (
     return (quat q.x -q.z q.y q.w)
   )
 
-  fn ReadQuat fin =
-  (
+  fn ReadQuat fin = (
     local x = ReadFloat fin
     local y = ReadFloat fin
     local z = ReadFloat fin
     local w = ReadFloat fin
-
     return (quat x y z w)
   )
 
-
-  fn ReadVector fin =
-  (
+  fn ReadVector fin = (
     local x = ReadFloat fin
     local y = ReadFloat fin
     local z = ReadFloat fin
-
     return ([x,y,z] as point3)
   )
 
-
-  fn ReadCoord fin =
-  (
+  fn ReadCoord fin = (
     local u = ReadFloat fin
     local v = ReadFloat fin
-
     return ([u,v,0] as point3)
   )
 
-  fn ReadFourCC fin =
-  (
+  fn ReadFourCC fin = (
     local a = bit.intAsChar (ReadByte fin #unsigned)
     local b = bit.intAsChar (ReadByte fin #unsigned)
     local c = bit.intAsChar (ReadByte fin #unsigned)
@@ -225,33 +215,27 @@ rollout ASPImport "ASP Import"
     return a+b+c+d
   )  
 
-  fn ReadFourBB fin =
-  (
+  fn ReadFourBB fin = (
     local a = ReadByte fin #unsigned
     local b = ReadByte fin #unsigned
     local c = ReadByte fin #unsigned
     local d = ReadByte fin #unsigned
-
     return #(a,b,c,d)
   )
 
-   fn ReadFourBB2 fin =
-  (
-    local a = ReadByte fin +1 -- #unsigned
-    local b = ReadByte fin +1 -- #unsigned
-    local c = ReadByte fin +1 -- #unsigned
-    local d = ReadByte fin +1 -- #unsigned
-
+   fn ReadFourBB2 fin = (
+    local a = ReadByte fin +1
+    local b = ReadByte fin +1
+    local c = ReadByte fin +1
+    local d = ReadByte fin +1
     return #(a,b,c,d)
   )
 
-  fn ReadFourFF fin =
-  (
+  fn ReadFourFF fin = (
     local a = ReadFloat fin
     local b = ReadFloat fin
     local c = ReadFloat fin
     local d = ReadFloat fin
-
     return #(a,b,c,d)
   )
 
@@ -352,8 +336,7 @@ rollout ASPImport "ASP Import"
   fn ReadBONH fin = (
     if (chk_Debug.checked) do format "debug: reading BONH section..."
 
-    for i = 1 to numBones do
-    (
+    for i = 1 to numBones do (
       local j = ReadLong fin
       local p = ReadLong fin
       local f = ReadLong fin
@@ -372,10 +355,7 @@ rollout ASPImport "ASP Import"
       append materials (strBSMM  textureIndex: (ReadLong fin) numberOfFaces: (ReadLong fin) )
     )
     subMesh[curSM].dataBSMM = materials
-    if (chk_Debug.checked) do format "ok!\n" 
-
-    --format "After ReadBSMM SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM]          
+    if (chk_Debug.checked) do format "ok!\n"         
   )
 
   fn ReadBSUB fin = (
@@ -391,10 +371,7 @@ rollout ASPImport "ASP Import"
     subMesh[curSM].numCorners = (ReadLong fin #unsigned)
     subMesh[curSM].numFaces = (ReadLong fin #unsigned)
 
-    if (chk_Debug.checked) do format "ok!\n"    
-    
-    --format "After ReadBSUB SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM]      
+    if (chk_Debug.checked) do format "ok!\n"     
   )
 
   fn ReadBVTX fin = (
@@ -413,9 +390,6 @@ rollout ASPImport "ASP Import"
 
     if (chk_Debug.checked) do format "ok!\n"
 
-    --format "After ReadBVTX SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM]  
-
     return true              
   )
   
@@ -425,7 +399,7 @@ rollout ASPImport "ASP Import"
     p = fetchIndex lookup.pos (ReadLong fin #unsigned)
     n = fetchIndex lookup.nrm (ReadNormal fin)
     c = fetchIndex lookup.col (ReadColour fin)
-    s = fetchIndex lookup.spc (ReadColour fin)
+    s = fetchIndex lookup.spc (ReadColour fin) -- specular colour
     u = fetchIndex lookup.txc (ReadUVee fin)
     return (strBCRN pos:p nrm:n col:c spc:s txc:u)
   )
@@ -443,13 +417,10 @@ rollout ASPImport "ASP Import"
       append subMesh[curSM].dataBCRN (ReadBCorner fin dataBLookup)
     )
     
-    if (chk_Debug.checked) do format "ok!\n"     
-    --format "After ReadBCRN SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM]           
+    if (chk_Debug.checked) do format "ok!\n"           
   )
 
-  fn ReadWCorner fin FixOffByOne lookup =
-  (
+  fn ReadWCorner fin FixOffByOne lookup = (
     local p, w, b, n, c, u
     p = fetchIndex lookup.pos (ReadVector fin)
     w = (ReadFourFF fin)
@@ -473,9 +444,6 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do format "ok!\n" 
-
-    --format "After ReadWCRN SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM]    
   )
 
 
@@ -502,20 +470,20 @@ rollout ASPImport "ASP Import"
   )
 
   fn ReadBTRI fin SupportSubMeshRanges = (
-    if (chk_Debug.checked) do
-      format "debug: reading BTRI section..."
+    if (chk_Debug.checked) do format "debug: reading BTRI section..."
 
-    if (subMesh[curSM].numFaces != ReadLong fin) do
+    if (subMesh[curSM].numFaces != ReadLong fin) do (
       messageBox "error: BTRI numFaces don't match"
+    )
 
     subMesh[curSM].dataBTRI = strBTRI()
 
-    -- read header
     subMesh[curSM].dataBTRI.cornerStart = #()
     subMesh[curSM].dataBTRI.cornerSpan = #()
 
+    -- Read indexed vertex spans if available
     for i = 1 to subMesh[curSM].dataBSMM.count do (
-      if SupportSubMeshRanges then ( 
+      if SupportSubMeshRanges then (
         subMesh[curSM].dataBTRI.cornerStart[i] = ReadLong fin
         subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
       )
@@ -535,9 +503,6 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do format "ok!\n"
-
-    --format "After ReadBTRI SubMesh[%]:\n" curSM
-    --DumpData subMesh[curSM] 
   )
 
   fn ReadBVWL fin = (
@@ -551,20 +516,21 @@ rollout ASPImport "ASP Import"
 
     for b = 1 to numBones do (
       count = ReadLong fin
-      if count < 0 and b == numBones then (
-        -- We could have a number of bones, only with a rigid 
-        -- weight, but in most cases there was only 1 bone.
+      if (count < 0) and (b == numBones) then (
+        -- We could have a number of boneIds, only with a rigid 
+        -- weight, but in most (all?) cases there was only 1 bone.
+        -- There may be some oddballs in the  front end gui animation.
         -- TODO: The only way to tell is scan them in and see if 
         -- we reach the next section. 
-        for i = v to subMesh[curSM].numVertices do (
-          subMesh[curSM].dataBVWL[v].bones = #(1)
+        for v = 1 to subMesh[curSM].numVertices do (
+          subMesh[curSM].dataBVWL[v].boneIds = #(1)
           subMesh[curSM].dataBVWL[v].weights = #(1)
         )
       )
       else (
         for j = 1 to count do (
           v = (ReadLong fin) + 1
-          append subMesh[curSM].dataBVWL[v].bones b
+          append subMesh[curSM].dataBVWL[v].boneIds b
           append subMesh[curSM].dataBVWL[v].weights (ReadFloat fin)
         )
       )
@@ -581,26 +547,25 @@ rollout ASPImport "ASP Import"
 
     subMesh[curSM].dataSTCH = #()
     local i, j
-    for i = 1 to subMesh[curSM].numStitches do
-    (
+    for i = 1 to subMesh[curSM].numStitches do (
       subMesh[curSM].dataSTCH[i] = strSTCH()
       subMesh[curSM].dataSTCH[i].token = ReadFourCC fin
       subMesh[curSM].dataSTCH[i].vertexCount = ReadLong fin
       subMesh[curSM].dataSTCH[i].vertexIndex = #()
-      for j = 1 to subMesh[curSM].dataSTCH[i].vertexCount do
+      for j = 1 to subMesh[curSM].dataSTCH[i].vertexCount do (
         subMesh[curSM].dataSTCH[i].vertexIndex[j] = (ReadLong fin)
+      )
     )
     if (chk_Debug.checked) do format "ok!\n"
   )
 
 
-  fn ReadRPOS fin =
-  (
+  fn ReadRPOS fin = (
     if (chk_Debug.checked) do format "debug: reading RPOS section..."
 
-    if (numBones != ReadLong fin) do
-      if (chk_Debug.checked) do
-        messageBox "error: RPOS numBones don't match"
+    if (numBones != ReadLong fin) do (
+      messageBox "error: RPOS numBones don't match"
+    )
 
     dataRPOS = #()
     local i
@@ -615,8 +580,7 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "ok!\n"
   )
 
-  fn ReadBBOX fin =
-  (
+  fn ReadBBOX fin = (
     if (chk_Debug.checked) do  format "debug: reading BBOX section..."
 
     local numBoxes = ReadLong fin 
@@ -634,9 +598,7 @@ rollout ASPImport "ASP Import"
     return boxes
   )
 
-
-  fn ReadBEND fin =
-  (
+  fn ReadBEND fin = (
     if (chk_Debug.checked) do
       format "debug: reading BEND section...\n"
 
@@ -701,16 +663,15 @@ rollout ASPImport "ASP Import"
     local TexcFaces = #()  
     local NrmlFaces = #()  
     local MatiFaces = #() 
- 
-    for sm = 1 to numSubMeshes do (
-      WCRNs = subMesh[sm].dataWCRN
+    for subm in subMesh do (
+      WCRNs = subm.dataWCRN
       local startIndex = 0;
-      for i = 1 to subMesh[sm].dataBSMM.count do (
-        local subMeshMat = subMesh[sm].dataBSMM[i]
+      for i = 1 to subm.dataBSMM.count do (
+        local subMeshMat = subm.dataBSMM[i]
         local matId = subMeshMat.textureIndex + 1
-        local cornerStart = subMesh[sm].dataBTRI.cornerStart[i] + 1
+        local cornerStart = subm.dataBTRI.cornerStart[i] + 1
         for j = 1 to subMeshMat.numberOfFaces do (
-          local face = subMesh[sm].dataBTRI.cornerIndex[startIndex + j]
+          local face = subm.dataBTRI.cornerIndex[startIndex + j]
           local cA = WCRNs[face.x + cornerStart]
           local cB = WCRNs[face.y + cornerStart]
           local cC = WCRNs[face.z + cornerStart]	
@@ -743,21 +704,25 @@ rollout ASPImport "ASP Import"
     for i = 1 to TexcFaces.count do setTVFace myMesh i TexcFaces[i]             
 
     update myMesh  
- 
-    local tools = (TopoTools      \
-      triObj:myMesh               \
-      faceCornerNormals:NrmlFaces \
-      faceCornerVerts:VertFaces
+
+    -- Build up smoothing groups from incoming normals
+    if chk_SetSmoothingGroups.checked then (
+      local tools = (TopoTools      \
+        triObj:myMesh               \
+        faceCornerNormals:NrmlFaces \
+        faceCornerVerts:VertFaces
+      ) 
+      select myMesh
+      tools.RebuildSmoothing() 
+      update myMesh
     )
-
-    tools.RebuildSmoothing()
-
-    update myMesh
 
     if (chk_SeeThru.checked) do
       myMesh.xray = true
 
-    if (chk_Debug.checked) do format "ok!\n"    
+    if (chk_Debug.checked) do format "ok!\n"  
+    
+    return myMesh
   )
 
   fn MakeTexture n = (
@@ -784,7 +749,7 @@ rollout ASPImport "ASP Import"
       )
     )
     if not found then (
-      if (chk_Debug.checked) do format "Missing: %\n" rawpath 
+      format "Can't locate texture for: %\n" basePath 
       texturepath = basePath
     )
     
@@ -799,22 +764,20 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn MakeMaterial =
-  (
+  fn MakeMaterial = (
     if (chk_Debug.checked) do format "debug: creating textures..."
 
+    -- TODO: Parse GAS and build up a material database (SS!)
+
     -- create standard texture, or multi-material if needed
-    if (numTextures > 1) then
-    (
+    if (numTextures > 1) then (
       myMat = MultiMaterial numSubs:numTextures
-      for i = 1 to numTextures do
-      (
+      for i = 1 to numTextures do (
         myMat.names[i] = textureName[i]
         myMat.materialList[i] = MakeTexture textureName[i]
       )
     )
-    else
-    (
+    else (
       myMat = MakeTexture textureName[1]
     )
 
@@ -826,8 +789,7 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn QuatApply v q =
-  (
+  fn QuatApply v q = (
     m = q as Matrix3
     x = dot m.row1 v
     y = dot m.row2 v
@@ -855,8 +817,7 @@ rollout ASPImport "ASP Import"
     return false
   )
 
-  fn MakeBones =
-  (
+  fn MakeBones = (
 
     local i, j
 
@@ -864,18 +825,15 @@ rollout ASPImport "ASP Import"
 
     -- build bones
     myBone = #()
-    for i = 1 to numBones do
-    (
+    for i = 1 to numBones do (
       local parent = boneInfo[i].parent
 
       -- create bone
-      if (parent == i or boneInfo[i].name == "leftfoot_pin" or boneInfo[i].name == "rightfoot_pin") then
-      (
+      if (parent == i or boneInfo[i].name == "leftfoot_pin" or boneInfo[i].name == "rightfoot_pin") then (
         myBone[i] = Sphere radius:(35 * spn_Scale.value) segs:16 \
                     name:boneInfo[i].name pos:[0,0,0] smooth:true
       )
-      else if (boneInfo[i].name == "weapon_grip") then
-      (
+      else if (boneInfo[i].name == "weapon_grip") then (
         if GripMarker == undefined then (        
           myBone[i] = Box name:boneInfo[i].name pos:[0,0,0]
         ) else (
@@ -883,8 +841,7 @@ rollout ASPImport "ASP Import"
 
         )
       )
-      else if (boneInfo[i].name == "shield_grip") then
-      (
+      else if (boneInfo[i].name == "shield_grip") then (
         if GripMarker == undefined then (
           myBone[i] = Box name:boneInfo[i].name pos:[0,0,0]
         )
@@ -892,15 +849,12 @@ rollout ASPImport "ASP Import"
           myBone[i] = GripMarker name:boneInfo[i].name gripType:2 pos:[0,0,0]
         )
       )
-      else
-      (
-        if (chk_BoneBall.checked) then
-        (
+      else (
+        if (chk_BoneBall.checked) then (
           myBone[i] = Sphere radius:(35 * spn_Scale.value) segs:16 \
                       name:boneInfo[i].name pos:[0,0,0] smooth:true
         )
-        else
-        (
+        else (
           myBone[i] = BoneSys.createBone [0,0,0] [1,0,0] [0,0,1]
           myBone[i].name   = boneInfo[i].name
           myBone[i].width  = 40 * spn_Scale.value
@@ -909,23 +863,25 @@ rollout ASPImport "ASP Import"
       )
 
       -- link to parent
-      if (parent == i or parent == 0) then
+      if (parent == i or parent == 0) then (
         myBone[i].parent = undefined
-      else
+      )
+      else (
         myBone[i].parent = myBone[parent]
+      )
 
       -- position and orientate relative to parent
       in coordsys parent myBone[i].rotation = FlipUpQuat dataRPOS[i].rot
       in coordsys parent myBone[i].position = (FlipUp dataRPOS[i].pos) * spn_Scale.value * 1000
 
       -- grips must be prerotated (hack fix)
-      if (myBone[i].name == "weapon_grip" or myBone[i].name == "shield_grip") do
+      if (myBone[i].name == "weapon_grip" or myBone[i].name == "shield_grip") do (
         in coordsys parent myBone[i].rotation = (FlipUpQuat dataRPOS[i].rot) * ((angleAxis 90 [1,0,0]) as quat)
+      )
 
       -- set miscellaneous properties
       if (myBone[i].name != "weapon_grip" and myBone[i].name != "shield_grip" and
-          myBone[i].name != "leftfoot_pin" and myBone[i].name != "rightfoot_pin") do
-      (
+          myBone[i].name != "leftfoot_pin" and myBone[i].name != "rightfoot_pin") do (
         myBone[i].setBoneEnable on 0
         myBone[i].boneAutoAlign = true
         myBone[i].boneFreezeLength = true
@@ -935,14 +891,11 @@ rollout ASPImport "ASP Import"
     )
 
     -- set bone lengths
-    for b in myBone do
-    (
-      if (classOf b == BoneGeometry) do
-      (
+    for b in myBone do (
+      if (classOf b == BoneGeometry) do (
         -- bone length is guessed to be the average of the distances to its children
         -- if it's a terminating bone, just guess the length
-        if (b.children.count > 0) then
-        (
+        if (b.children.count > 0) then (
           local distSum = 0
           for b2 in b.children do
             distSum += distance b.pos b2.pos
@@ -952,15 +905,15 @@ rollout ASPImport "ASP Import"
             b.height = 6 * spn_Scale.value            
           )          
         )
-        else
-        (
+        else (
           -- TODO: look up the bone name and figure out a good size for it
           -- Probably just want to hide it put in a facial rig and what-have-you
           if IsSmallBone b then (
             b.width  = 4 * spn_Scale.value
             b.height = 4 * spn_Scale.value 
             b.length = 15 * spn_Scale.value                
-          ) else (
+          ) 
+          else (
             b.length = 100 * spn_Scale.value      
           )
         )
@@ -971,8 +924,7 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn MakeSkin =
-  (
+  fn MakeSkin = (
     local i,j,k
 
     if (chk_Debug.checked) do format "debug: creating skin..."
@@ -993,14 +945,16 @@ rollout ASPImport "ASP Import"
     skinOps.SelectVertices mySkin allVerts
     skinOps.resetSelectedVerts mySkin
 
+    -- TODO speed this up, don't set any vert twice
     -- set vertex weights
-    local cornOffset = 0
-
     with redraw off (
-        for v = 1 to dataWLookup.pos.count do (
-          local wl = subMesh[sm].dataBVWL[v]
-          skinOps.ReplaceVertexWeights mySkin v wl.bones wl.weights      
-      )
+        for sm in subMesh do (
+          for v = 1 to sm.dataBVWL.count do (
+            local posIdx = sm.dataBVTX[v]
+            local wl = sm.dataBVWL[v]
+            skinOps.ReplaceVertexWeights mySkin posIdx wl.boneIds wl.weights      
+          )
+        )
     )
 
     subObjectLevel = 0
@@ -1011,8 +965,7 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn ImportASP fin =
-  (
+  fn ImportASP fin = (
     local aspHeader = ReadChunkHeader fin
 
     if (aspHeader.mark != "BMSH") then (
@@ -1029,24 +982,24 @@ rollout ASPImport "ASP Import"
     )
 
     if (chk_Debug.checked) do (
-      for sm = 1 to numSubMeshes do (
-        DumpData subMesh[sm] sm
+      for smi = 1 to numSubMeshes do (
+        DumpData subMesh[smi] smi
       )
     ) 
 
     if chk_DebugVertList.checked then (
-      for sm = 1 to numSubMeshes do (
-        dbgMeshes = for v = 1 to subMesh[sm].dataBVTX.count collect (
-          local p = (FlipUp dataWLookup.pos[subMesh[sm].dataBVTX[v]]) * 1000 * spn_Scale.value
+      for sm in subMesh do (
+        dbgMeshes = for v = 1 to sm.dataBVTX.count collect (
+          local p = (FlipUp dataWLookup.pos[sm.dataBVTX[v]]) * 1000 * spn_Scale.value
           Sphere radius:(5 * spn_Scale.value) segs:16 name:(v as string) pos:p smooth:true wirecolor:(color 108 0 136)       
         )
       )
     )   
     
-    for sm = 1 to numSubMeshes do (
-      for v = 1 to  subMesh[sm].dataBVMP.count do (
-        for corner in subMesh[sm].dataBVMP[v].cornersInfluenced do (
-          subMesh[sm].dataWCRN[corner+1].pos = subMesh[sm].dataBVTX[v]
+    for sm in subMesh do (
+      for v = 1 to  sm.dataBVMP.count do (
+        for corner in sm.dataBVMP[v].cornersInfluenced do (
+          sm.dataWCRN[corner+1].pos = sm.dataBVTX[v]
         )          
       )        
     )    
@@ -1055,16 +1008,16 @@ rollout ASPImport "ASP Import"
 
     MakeMesh flipVcoord:(isBrokenWorld or chk_FlipUV.checked)
 
-    if (chk_Texture.checked and numTextures > 0) do
+    if (chk_Texture.checked and numTextures > 0) do (
       MakeMaterial()
+    )
 
-    if (chk_Bone.checked and numBones > 0) do
-    (
+    if (chk_Bone.checked and numBones > 0) do (
       with undo off (      
         makeBones()
         if (chk_Skin.checked) do (
-            makeSkin()
-          )
+          makeSkin()
+        )
       )
     )
 
@@ -1076,8 +1029,7 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn GetOpenFileStream =
-  (
+  fn GetOpenFileStream = (
     local fname = GetOpenFileName types:"Aspect Mesh (*.asp)|*.asp|All Files (*.*)|*.*|"
     if (fname == undefined) do
       return false
@@ -1087,8 +1039,7 @@ rollout ASPImport "ASP Import"
     nnkName = (filterString tokens[tokens.count] ".")[1]
 
     aspFileIn = fopen fname "rb"
-    if (aspFileIn == undefined) do
-    (
+    if (aspFileIn == undefined) do (
       messageBox "Could not open file for binary reading!"
       return false
     )
@@ -1097,14 +1048,12 @@ rollout ASPImport "ASP Import"
   )
 
 
-  on btn_ImportNow pressed do
-  (
+  on btn_ImportNow pressed do (
     local oldCoordsys
 
     oldCoordsys = set coordsys world
 
-    if (GetOpenFileStream()) do
-    (
+    if (GetOpenFileStream()) do (
       if (ImportASP aspFileIn) then
         format "ASP import successful.\n"
       else
@@ -1118,9 +1067,8 @@ rollout ASPImport "ASP Import"
 )
 
 
-fn lanceImportASP =
-(
-  addRollout ASPImport (newRolloutFloater "ASP Import" 200 265)
+fn lanceImportASP = (
+  addRollout ASPImport (newRolloutFloater "ASP Import" 200 350)
 )
 
 /*
