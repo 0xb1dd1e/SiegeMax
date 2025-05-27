@@ -355,7 +355,8 @@ fn ExtractDoorFromEdgeList obj edgeList newDoor AllowLoopyDoors:false = (
 					search_index = finditem high_v next_vert
 					if (search_index == 0) then
 					(
-						MessageBox "Error: Edges are not continuous, cannot extract door"
+						MessageBox "Error: Edges are not continuous, cannot extract door (step 1)"
+						format "problem low: % next: % edge list: % bits:%\n" low_vert next_vert edgeList edge_bits					
 						return false
 					)
 				)
@@ -425,11 +426,11 @@ fn ExtractDoorFromEdgeList obj edgeList newDoor AllowLoopyDoors:false = (
 			)
 			else
 			(
-				MessageBox "Error: Edges are not continuous, cannot extract door"
+				MessageBox "Error: Edges are not continuous, cannot extract door (step 2)"
+				format "problem low_v: % high_v: % edge list: % bits:\n" low_v high_v edgeList edge_bits
 				return false
 			)
-		)
-	
+		)							
 	)
 	
 	if last_vert != undefined then

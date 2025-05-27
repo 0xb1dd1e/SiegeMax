@@ -945,16 +945,19 @@ rollout ASPImport "ASP Import"
     skinOps.SelectVertices mySkin allVerts
     skinOps.resetSelectedVerts mySkin
 
-    -- TODO speed this up, don't set any vert twice
     -- set vertex weights
+    weighted = #{}
     with redraw off (
-        for sm in subMesh do (
-          for v = 1 to sm.dataBVWL.count do (
-            local posIdx = sm.dataBVTX[v]
+      for sm in subMesh do (
+        for v = 1 to sm.dataBVWL.count do (
+          local posIdx = sm.dataBVTX[v]
+          if not weighted[posIdx] then (
             local wl = sm.dataBVWL[v]
             skinOps.ReplaceVertexWeights mySkin posIdx wl.boneIds wl.weights      
+            weighted[posIdx] = true
           )
         )
+      )
     )
 
     subObjectLevel = 0

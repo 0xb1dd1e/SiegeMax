@@ -360,4 +360,3 @@ struct ASP_RestPose {
 sBoundingBox_Chunk BoundingBoxData;
 sEnd_Chunk EndMark;
 sInfoMark_Chunk InfoMark;
-
