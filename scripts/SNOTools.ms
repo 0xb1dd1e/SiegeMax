@@ -281,12 +281,6 @@ fn BuildDoorDirections node snoMod = (
 )
 
 ----------------------------------------------------------------------------------------
-fn ExtractDoorFromSelectedEdges obj newDoor = (
-	edgeList = for ei in obj.selectededges collect ei.index
-	return ExtractDoorFromEdgeList obj edgeList newDoor
-)
-
-----------------------------------------------------------------------------------------
 fn ExtractDoorFromEdgeList obj edgeList newDoor AllowLoopyDoors:false = (
 
 	newDoor.verts = #()
@@ -485,6 +479,12 @@ fn ExtractDoorFromEdgeList obj edgeList newDoor AllowLoopyDoors:false = (
 	)
 	
 	return true
+)
+
+----------------------------------------------------------------------------------------
+fn ExtractDoorFromSelectedEdges obj newDoor = (
+	edgeList = for ei in obj.selectededges collect ei.index
+	return ExtractDoorFromEdgeList obj edgeList newDoor
 )
 
 ----------------------------------------------------------------------------------------
