@@ -68,6 +68,19 @@ rollout SNOImport "SNO Import"
   )
   button btn_ImportNow "Import..." width:100
 
+  fn DumpList lst cutoff:3 first:1 count:undefined = ( 
+    if count == undefined then (
+      count = lst.count
+    ) 
+    for v = 0 to count-1 do (
+      if (v < cutoff or v >= count-cutoff) then (
+        format "    %: %\n" (first+v) lst[first+v]
+      )
+      else if (v == (cutoff+1) and count > (cutoff*2)) then (
+        format "        ...\n"
+      )         
+    )        
+  )
 
   fn FlipUp v =
   (
@@ -213,9 +226,14 @@ rollout SNOImport "SNO Import"
   
   fn fetchIndex itms val addIfMissing:true = (
     i = findItem itms val
-    if i == 0 and addIfMissing then (
-      append itms val
-      i = itms.count
+    if i == 0 then (
+      if addIfMissing then (
+        append itms val
+        i = itms.count
+      ) else (
+        format "FATAL: % is missing in %\n" v itms
+        throw ("FATAL: " + (v as string) + " is missing in " + (itms as string) + "\n")
+      )
     )
     return i
   )
@@ -346,11 +364,13 @@ rollout SNOImport "SNO Import"
 
     n.faceNorm = ReadVector fin
 
+    /*
     local A = fetchIndex dataLookup.pos n.verts[1] addIfMissing:false
     local B = fetchIndex dataLookup.pos n.verts[2] addIfMissing:false
     local C = fetchIndex dataLookup.pos n.verts[3] addIfMissing:false
     
     n.faceVerts = #{A,B,C}
+    */
 
     -- Face will be set later from faceVerts, once the mesh is constructed
 
@@ -564,20 +584,42 @@ rollout SNOImport "SNO Import"
       return out
     )
 
+    fn faceFromTriNorm obj lookup tn = (
+        fn orSets a b c = (
+          local result = #{}
+          for i in a do result[i] = (b[i] and c[i])
+          return result
+        )
+        -- Now we can figure out what face this trinorm was constructed from
+        local pts = for v = 1 to 3 collect ((FlipUp tn.verts[v]) * spn_Scale.value * 1000)
+        local idx = for p in pts collect (fetchIndex lookup p addIfMissing:false)
+        local facesA = meshop.getFacesUsingVert obj idx[1]          
+        local facesB = meshop.getFacesUsingVert obj idx[2]          
+        local facesC = meshop.getFacesUsingVert obj idx[3]          
+        return (orSets facesA facesB facesC)
+    )
+
+    floorFaces = #{}
+    waterFaces = #{}
+
     for ln = 1 to dataLogicalNodes.count do (
       lno = dataLogicalNodes[ln]
       flags = (DecodeFlags lno.flags)
-      format "Logical node % flags: %\n" ln flags
       if (findItem flags #IS_FLOOR) > 0 then (
-        format "Let's floor %\n" ln 
-        for tn = 1 to lno.numTriangles do (
-          trinorm = lno.triangles[tn]
-          -- Now we can figure out what face this trinorm was constructed from
-          trinorm.face = meshop.getFacesUsingVert obj trinorm.faceVerts
-          format "%: % -> %\n" tn trinorm.face trinorm.faceVerts     
+        for tn in lno.triangles do (
+          floorFaces += faceFromTriNorm obj dataLookup.pos tn
         )
       )
+      if (findItem flags #IS_WATER) > 0 then (
+        for tn in lno.triangles do (
+          waterFaces += faceFromTriNorm obj dataLookup.pos tn
+        )
+      )      
     )
+
+    format "floor faces %\n" floorFaces 
+    format "water faces %\n" waterFaces 
+
   )
 
   fn MakeMesh = (
