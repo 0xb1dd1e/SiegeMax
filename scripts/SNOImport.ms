@@ -454,8 +454,7 @@ rollout SNOImport "SNO Import"
 
   fn ReadSNO fin = (
     
-    if (chk_Debug.checked) do
-      format "debug: reading sno...\n"
+    if (chk_Debug.checked) do format "debug: reading sno...\n"
 
     -- read header
     dataHeader = ReadHeader fin
@@ -490,10 +489,11 @@ rollout SNOImport "SNO Import"
       dataLogicalNodes = #()
       for i = 1 to dataNumLogicalNodes do
         append dataLogicalNodes (ReadLogicalNode fin)
-      format "Read in % logical nodes\n" dataNumLogicalNodes
+      if (chk_Debug.checked) do format "Read in % logical nodes\n" dataNumLogicalNodes
     )
     else (
       format "This version %.% SNO is too old to scan for BSP nodes\n" dataHeader.majorVersion dataHeader.minorVersion
+      messageBox "This SNO is too old to scan for BSP nodes"
     )
     
       return true
@@ -502,9 +502,7 @@ rollout SNOImport "SNO Import"
   fn MakeDoors snomod = (
     local i, j
 
-    if (chk_Debug.checked) do (
-      format "debug: creating doors...\n"
-    )
+    if (chk_Debug.checked) do format "debug: creating doors...\n"
 
     snomod.tDoorList = #()    
     for d = 1 to dataHeader.numDoors do
@@ -568,7 +566,7 @@ rollout SNOImport "SNO Import"
 
   )
 
-  fn MakeFloors obj snomod = (
+  fn MakeFaceFlags obj snomod = (
     
     fn DecodeFlags flg = (
       local HUMANOID_WALKABLE	= bit.shift 1 0
@@ -599,34 +597,35 @@ rollout SNOImport "SNO Import"
         return (orSets facesA facesB facesC)
     )
 
-    floorFaces = #{}
-    waterFaces = #{}
-
+    snoMod.tFloorBits = #{}
+    snoMod.tWaterBits = #{}
+    
     for ln = 1 to dataLogicalNodes.count do (
       lno = dataLogicalNodes[ln]
       flags = (DecodeFlags lno.flags)
       if (findItem flags #IS_FLOOR) > 0 then (
         for tn in lno.triangles do (
-          floorFaces += faceFromTriNorm obj dataLookup.pos tn
+          snoMod.tFloorBits += faceFromTriNorm obj dataLookup.pos tn
         )
       )
       if (findItem flags #IS_WATER) > 0 then (
         for tn in lno.triangles do (
-          waterFaces += faceFromTriNorm obj dataLookup.pos tn
+          snoMod.tWaterBits += faceFromTriNorm obj dataLookup.pos tn
         )
       )      
     )
 
-    format "floor faces %\n" floorFaces 
-    format "water faces %\n" waterFaces 
+    if (chk_Debug.checked) do (
+      format "floor faces %\n" snoMod.tFloorBits 
+      format "water faces %\n" snoMod.tWaterBits 
+    )
 
   )
 
   fn MakeMesh = (
     local i, j
 
-    if (chk_Debug.checked) do
-      format "debug: creating mesh...\n"
+    if (chk_Debug.checked) do format "debug: creating mesh...\n"
 
     for i = 1 to dataLookup.pos.count do (
         dataLookup.pos[i] = ((FlipUp dataLookup.pos[i]) * spn_Scale.value * 1000)
@@ -773,8 +772,8 @@ rollout SNOImport "SNO Import"
     MakeMesh()
     
     if (chk_Texture.checked and dataHeader.numSurfaces > 0) do (
-      format "Will look for bitmaps in your output path: %\n" (dsGetOutputPath())
-        MakeMaterial()
+      if (chk_Debug.checked) do format "Will look for bitmaps in your output path: %\n" (dsGetOutputPath())
+      MakeMaterial()
     )
 
     -- add siegemax specific things
@@ -788,7 +787,7 @@ rollout SNOImport "SNO Import"
 
     newmod.SaveDoorVertMapping newmod
 
-    MakeFloors myMesh newmod
+    MakeFaceFlags myMesh newmod
     
     return true
   )

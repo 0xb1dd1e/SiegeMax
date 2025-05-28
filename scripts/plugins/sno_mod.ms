@@ -98,7 +98,7 @@ category:"Siege Max"
 		-- We can recover the information and reconstruct the doors
 		-- after a topology change.
 
-		format "UpdateDoorVertMapping!\n"
+		format "PreserveDoorVertMapping!\n"
 		local snoMesh = (refs.dependents snoMod)[1]
 
 		if (meshop.getNumVDataChannels snoMesh) <= snoMod.tDoorPosZ then (
@@ -142,7 +142,7 @@ category:"Siege Max"
 
 		for d = 1 to snoMod.tDoorList.count do
 		(	
-			format "door %\n" d
+			-- format "door %\n" d
 			local snoDoor = snoMod.tDoorList[d]		
 			for v = 1 to snoDoor.verts.count do (
 
@@ -165,7 +165,7 @@ category:"Siege Max"
 					-- if it has been bumped.. (and perhaps snap it back?)
 
 					local pos = meshop.getVert snoMesh dv
-					format "stowing % %\n" dv pos
+					-- format "stowing % %\n" dv pos
 					meshop.setVDataValue snoMesh snoMod.tDoorPosX dv pos.x
 					meshop.setVDataValue snoMesh snoMod.tDoorPosY dv pos.y
 					meshop.setVDataValue snoMesh snoMod.tDoorPosZ dv pos.z
@@ -193,11 +193,11 @@ category:"Siege Max"
 						meshop.setVDataValue snoMesh snoMod.tDoorQSeq dv dQs					
 					)					
 				)
-				format "    info % % % % %\n" dv dPn dPs dQn dQs 
+				-- format "    info % % % % %\n" dv dPn dPs dQn dQs 
 			)
 		)
 
-		format "Store info into % verts\n" numStored
+		-- format "Store info into % verts\n" numStored
 	)
 
 	fn RestoreDoorVertMapping snoMod = (
