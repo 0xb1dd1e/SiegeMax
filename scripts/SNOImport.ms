@@ -11,6 +11,7 @@
 --  5/11/2025 biddle - quantize the normals and uvees to avoid sliver triangles
 --  5/17/2025 biddle - recreate simple doors
 --  5/17/2025 biddle - search for DDS textures
+--  6/07/2025 biddle - handle doors with redundant edges
 --
 -------------------------------------------------------------------------------------------
 
@@ -96,8 +97,7 @@ rollout SNOImport "SNO Import"
     return s / tol
   )
 
-  fn ReadUVee fin =
-  (
+  fn ReadUVee fin = (
     -- Sub-texel accuracy is suspect in a lot 
     -- of the uv mapping that is encountered
     u = Quantize (ReadFloat fin) 1024
@@ -114,8 +114,7 @@ rollout SNOImport "SNO Import"
     return point3 x y z 
   )
 
-  fn ReadPosThenRot fin =
-  (
+  fn ReadPosThenRot fin = (
     local px = ReadFloat fin
     local py = ReadFloat fin
     local pz = ReadFloat fin
@@ -132,8 +131,7 @@ rollout SNOImport "SNO Import"
     return (matrix3 [r0,r1,r2] [r3,r4,r5] [r6,r7,r8] [px,py,pz])
   )
 
-  fn ReadRotThenPos fin =
-  (
+  fn ReadRotThenPos fin = (
     local r0 = ReadFloat fin
     local r1 = ReadFloat fin
     local r2 = ReadFloat fin
@@ -151,8 +149,7 @@ rollout SNOImport "SNO Import"
   )
 
 
-  fn ReadHeader fin =
-  (
+  fn ReadHeader fin = (
     local h = strHeader()
 
     h.magic         = ReadLong fin #unsigned
@@ -192,8 +189,7 @@ rollout SNOImport "SNO Import"
   )
 
 
-  fn ReadDoor fin =
-  (
+  fn ReadDoor fin = (
     local i
     local d = ReadLong fin
     local m = ReadPosThenRot fin
@@ -207,8 +203,7 @@ rollout SNOImport "SNO Import"
   )
 
 
-  fn ReadSpot fin =
-  (
+  fn ReadSpot fin = (
     local m = ReadRotThenPos fin
     local n = ReadString fin
 
@@ -243,8 +238,7 @@ rollout SNOImport "SNO Import"
     return strCorner()
   )
 
-  fn ReadCorner fin =
-  (
+  fn ReadCorner fin = (
     local p = fetchIndex dataLookup.pos (ReadVector fin)
     local n = fetchIndex dataLookup.nrm (ReadNormal fin)
     local c = fetchIndex dataLookup.col (ReadColour fin)
@@ -736,7 +730,7 @@ rollout SNOImport "SNO Import"
   )
 
   fn MakeMaterial = (
-	local i
+	  local i
 
     if (chk_Debug.checked) do format "debug: creating material...\n"
 
@@ -828,6 +822,22 @@ rollout SNOImport "SNO Import"
     )
 
     set coordsys oldCoordsys
+
+    -- release all the storage we allocated
+    snoFileIn = undefined
+    dataHeader = undefined
+    dataSpots = undefined
+    dataDoors = undefined
+    dataCorners = undefined
+    dataSurfaces = undefined
+    dataLookup = undefined
+    dataNumLogicalNodes = undefined
+    dataLogicalNodes = undefined
+    myMesh = undefined
+    myMat = undefined
+    myDoor = undefined
+    nnkName  = undefined  
+
   )
 
 )
@@ -842,9 +852,4 @@ fn lanceImportSNO =
 listener one-liner to reload the WIP
 
 clearlistener(); filein ((GetDir #scripts) +"\\plugins\\sno_mod.ms"); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
-
-Known problems:
-Non-contiguous edges: $t_gi_gad_wal_nook-04-a
-
-
 */

@@ -100,6 +100,7 @@ if not dsFatalError then
 	
 	fileIn (scriptdir+"/plugins/asp_mod.ms")
 	fileIn (scriptdir+"/plugins/sno_mod.ms")
+	fileIn (scriptdir+"/plugins/GripMarker.ms")	
 	
 	fileIn (scriptdir+"/NoteTrackTools.ms")
 	fileIn (scriptdir+"/HelpTools.ms")

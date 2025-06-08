@@ -65,11 +65,11 @@ category:"Siege Max"
 	)
 
 	fn collectDoorEdgesForVerts obj doorVertSet =
-	(
+	(		
 		local edgeList = #()
 		local edgeMap = #() -- prevent duplicates
 
-		-- Build a list of all edges from faces
+		-- Build a list of all edges from faces containing door verts
 		for f = 1 to getNumFaces obj do
 		(
 			local ff = getFace obj f
@@ -78,17 +78,71 @@ category:"Siege Max"
 								(if ff.z < ff.x then #{ff.z, ff.x} else #{ff.x, ff.z}))
 			for ee in 1 to 3 do
 			(
-			if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
-				local key = (faceEdges[ee] as string) as name
-				if (findItem edgeMap key) == 0 then (       
-				local edgeIndex = 3 * (f-1) + ee
-				append edgeList edgeIndex
-				append edgeMap key
-				) 
-			)
+				if ((faceEdges[ee] * doorVertSet).numberset == 2) do (         
+					local key = (faceEdges[ee] as string) as name
+					if (findItem edgeMap key) == 0 then (       
+						local edgeIndex = 3 * (f-1) + ee
+						append edgeList edgeIndex
+						append edgeMap key
+					) 
+				)
 			)
 		)
-	
+
+		-- While we have more than the minimal spanning set of edges
+		-- Remove a edge that revisit a verts
+		local redundant = #{}
+		local fanout = #()
+
+		expectedEdgeCount = (doorVertSet.numberset-1)		 
+		while edgeList.count > expectedEdgeCount do (
+
+			local worstVert = 0
+			for v in doorVertSet do (
+				fanout[v] = 0
+				if worstVert == 0 then worstVert = v
+				edges = meshop.getEdgesUsingVert obj v
+				for edge in edges do (
+					if (findItem edgeList edge) > 0 do (
+						fanout[v] += 1
+					)
+				)
+				if fanout[v] > fanout[worstVert] then (
+					worstVert = v
+				)
+				redundant[v] = fanout[v] > 2
+			)
+			
+			if (fanout[worstVert] <= 2) then (
+				--format "The door verts form a closed loop of edges. You are going to get a loopy door message.\n"
+				exit
+			)
+			
+			worstEdge = 0
+			local usingWorstVert= meshop.getEdgesUsingVert obj #(worstVert) as bitarray
+			redundant[worstVert] = false
+			for r in redundant do (	
+				local usingRedundantVert =  meshop.getEdgesUsingVert obj #(r) as bitarray
+				local candidates = usingWorstVert * usingRedundantVert
+				if candidates.numberset > 0 then (
+					wedge = (candidates as array)[1]
+					if (findItem edgeList wedge) > 0 do (
+						worstEdge = wedge
+						exit
+					)
+				)
+			)				
+
+			prunedList = #()
+			for keeper in edgelist do if keeper != worstEdge then append prunedList keeper	
+
+			if (edgeList.count == prunedList.count) then (
+				format "ERROR: nothing was pruned!!!\n"
+				exit
+			)
+			edgeList = prunedList
+		)
+
 		return edgeList
 	)   
 
