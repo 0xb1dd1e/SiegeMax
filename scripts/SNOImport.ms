@@ -504,9 +504,16 @@ rollout SNOImport "SNO Import"
       local door = dataDoors[d]
       local doorVertSet = #{}
       for j = 1 to door.numVerts do (
-        p = dataCorners[door.verts[j]+1].pos
+        if (door.verts[j] < 0) then (
+          if (chk_Debug.checked) do format "Ignoring illegal door vert %! % (of %)\n" j door.verts[j] dataCorners.count
+          continue
+        )
+        local p = dataCorners[door.verts[j]+1].pos
         doorVertSet[p] = true
       ) 
+
+      if (chk_Debug.checked) do format "Collecting edge for door vert set %\n" doorVertSet
+
       local doorEdges = snomod.collectDoorEdgesForVerts myMesh doorVertSet
 
       if (chk_Debug.checked) do (      
@@ -852,4 +859,7 @@ fn lanceImportSNO =
 listener one-liner to reload the WIP
 
 clearlistener(); filein ((GetDir #scripts) +"\\plugins\\sno_mod.ms"); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
+
+Problem files:
+t_dm01_track_cave-08-sides
 */

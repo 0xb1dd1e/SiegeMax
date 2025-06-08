@@ -118,21 +118,31 @@ category:"Siege Max"
 				exit
 			)
 			
-			worstEdge = 0
-			local usingWorstVert= meshop.getEdgesUsingVert obj #(worstVert) as bitarray
-			redundant[worstVert] = false
+			-- Look for edges that have faces on both sides. This would indicate that they are not on the boundary
+			-- of the mesh and make good candidates for pruning out of the set of edges that span the door verts.
+			local worstEdge = 0
+			local usingWorstVert = meshop.getEdgesUsingVert obj #(worstVert) as bitarray
 			for r in redundant do (	
-				local usingRedundantVert =  meshop.getEdgesUsingVert obj #(r) as bitarray
-				local candidates = usingWorstVert * usingRedundantVert
-				if candidates.numberset > 0 then (
-					wedge = (candidates as array)[1]
-					if (findItem edgeList wedge) > 0 do (
-						worstEdge = wedge
-						exit
-					)
+				local edgesUsingRedundantVert =  meshop.getEdgesUsingVert obj #(r) as bitarray
+				local candidates = usingWorstVert * edgesUsingRedundantVert
+				for candidate in candidates do (
+					revEdges = meshop.getEdgesReverseEdge obj candidate
+					-- format "candidate % as % reverse edges % (idx: %)\n" candidate revEdges.numberset revEdges ((findItem edgeList (revEdges as array)[1]))
+					if revEdges.numberset > 0 then (
+						wedge = (revEdges as array)[1]
+						if (findItem edgeList wedge) > 0 then (
+							-- format "candidate % wedge %\n" candidate wedge
+							worstEdge = wedge
+							exit
+						)
+					)					
+				)
+				if (worstEdge > 0) then (
+					exit
 				)
 			)				
 
+			-- Prune the worst edge and try again. We converge on a spanning set
 			prunedList = #()
 			for keeper in edgelist do if keeper != worstEdge then append prunedList keeper	
 
