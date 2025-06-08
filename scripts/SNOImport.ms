@@ -12,11 +12,13 @@
 --  5/17/2025 biddle - recreate simple doors
 --  5/17/2025 biddle - search for DDS textures
 --  6/07/2025 biddle - handle doors with redundant edges
+--  6/08/2025 biddle - handle doors with illegal verts, unify material loading
 --
 -------------------------------------------------------------------------------------------
 
 
 filein ((GetDir #scripts) +"\\TopoTools.ms")
+filein ((GetDir #scripts) +"\\MaterialTools.ms")
 
 rollout SNOImport "SNO Import"
 (
@@ -687,81 +689,6 @@ rollout SNOImport "SNO Import"
 
     return myMesh
   )
-  
-  fn MakeTexture n = (
-
-    local t = StandardMaterial          \
-              name:             n       \
-              shaderByName:     "blinn" \
-              adTextureLock:    true    \
-              adLock:           true    \
-              showInViewport:   true    \
-              diffuseMapEnable: true    \
-              opacityMapEnable: true
-	
-    -- look for the bitmap in the output path.
-
-    -- The original SiegeMax did not have DDS support, but you can
-    -- install the NetImmerse/Gamebryo gmax plugin that does have it.
-    -- https://www.moddb.com/addons/dds-and-nif-support-for-gmax
-
-    local extensions = #(".dds", ".raw", ".psd")
-    local basePath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n)
-    local texturepath = ""
-    
-    found = false
-    for ext in extensions do (
-      texturepath = basePath + ext
-      if (doesFileExist texturepath) then (
-        if (chk_Debug.checked) do format "Found: %\n" texturepath         
-        found = true
-        exit
-      )
-    )
-    if not found then (
-      if (chk_Debug.checked) do format "Missing: %\n" rawpath 
-      texturepath = basePath
-    )
-
-    -- TODO:
-    --   search other potential paths		
-    
-    t.diffuseMap = BitmapTexture name:(n + "_diffuse") \
-                   filename:(texturepath)
-    t.opacityMap = BitmapTexture name:(n + "_opacity") \
-                   filename:(texturepath) \
-                   monoOutput: 1 \
-                   alphaSource: 0
-
-    return t
-  )
-
-  fn MakeMaterial = (
-	  local i
-
-    if (chk_Debug.checked) do format "debug: creating material...\n"
-
-    -- create standard texture, or multi-material if needed
-    if (dataHeader.numSurfaces > 1) then
-    (
-      myMat = MultiMaterial numSubs:dataHeader.numSurfaces
-      for i = 1 to dataHeader.numSurfaces do
-      (
-        myMat.names[i] = dataSurfaces[i].textureName
-        myMat.materialList[i] = (MakeTexture dataSurfaces[i].textureName)
-      )
-    )
-    else
-    (
-      myMat = (MakeTexture dataSurfaces[1].textureName)
-    )
-
-    -- add material to first slot in material editor
-    setMeditMaterial 1 myMat
-
-    -- assign material to mesh
-    myMesh.material = myMat
-  )
 
   fn ImportSNO fin = (
 
@@ -773,8 +700,13 @@ rollout SNOImport "SNO Import"
     MakeMesh()
     
     if (chk_Texture.checked and dataHeader.numSurfaces > 0) do (
-      if (chk_Debug.checked) do format "Will look for bitmaps in your output path: %\n" (dsGetOutputPath())
-      MakeMaterial()
+      --if (chk_Debug.checked) do format "Will look for bitmaps in your output path: %\n" (dsGetOutputPath())
+      matNames = for ds in dataSurfaces collect ds.textureName
+      local mtools = MaterialTools()
+      myMesh.material = mtools.MakeMaterials matNames debug:chk_Debug.checked
+      if (myMesh.material != undefined) then (        
+        setMeditMaterial 1 myMesh.material
+      )
     )
 
     -- add siegemax specific things

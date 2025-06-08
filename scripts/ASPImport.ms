@@ -9,27 +9,15 @@
 --  5/23/2025 biddle - Added support for 5.1 version (DS2BW)
 --  5/24/2025 biddle - Optimize faces and add smoothing groups
 --  5/25/2025 biddle - Sort out D3D indexed sub-ranges, optimization, skinning
+--  6/08/2025 biddle - Unify material loading
 --
 -------------------------------------------------------------------------------------------
 
 filein ((GetDir #scripts) +"\\TopoTools.ms")
+filein ((GetDir #scripts) +"\\MaterialTools.ms")
 
 rollout ASPImport "ASP Import"
 (
-  /*
-  local V1_2 
-  local V1_3   -- introduced WCRN section
-  local V2_0   -- introduced STCH section
-  local V2_1   -- introduced BBOX section
-  local V2_2   -- introduced D3D indexed sub-range optimization
-  local V2_3
-  local V2_4
-  local V2_5
-  local V4_0   -- introduced with Siege Max (DS1)
-  local V4_1
-  local v5_0   -- DS LoA (DS2?)
-  local v5_1   -- DS2 BW (DDS flips)
-*/
 
   struct strChunkHeader  ( mark = 0, majorVersion = 0, minorVersion = 0, extraVersion = 0 )
   struct strBoneInfo ( name, parent, flags )
@@ -69,14 +57,12 @@ rollout ASPImport "ASP Import"
   local renderFlags
   local curSM
 
-  local textureName
+  local textureNames
   local boneInfo
   local subMesh
 
   local dataRPOS
 
-  local myMesh
-  local myMat
   local myBone
   local mySkin
 
@@ -317,10 +303,10 @@ rollout ASPImport "ASP Import"
     )
 
     -- split tokens in textures names and bone names
-    textureName = #()
+    textureNames = #()
     if (numTextures > 0) do
       for i = 1 to numTextures do
-        textureName[i] = token[i]
+        textureNames[i] = token[i]
     boneInfo = #()
     if (numBones > 0) do
       for i = 1 to numBones do
@@ -685,109 +671,45 @@ rollout ASPImport "ASP Import"
     )
 
     -- create mesh
-    myMesh = Mesh \
+    local newMesh = Mesh \
              name:        nnkName  \
              vertices:    meshVerts \
              faces:       VertFaces \
              materialIDs: MatiFaces 
 
     -- Set the texture verts and faces
-    setNumTVerts myMesh dataWLookup.txc.count 
+    setNumTVerts newMesh dataWLookup.txc.count 
     for i = 1 to dataWLookup.txc.count do (
       uv = dataWLookup.txc[i]
       if (flipVcoord) then (
         uv.y = 1-uv.y
       )
-      setTVert myMesh i uv
+      setTVert newMesh i uv
     )
-    buildTVFaces myMesh
-    for i = 1 to TexcFaces.count do setTVFace myMesh i TexcFaces[i]             
+    buildTVFaces newMesh
+    for i = 1 to TexcFaces.count do setTVFace newMesh i TexcFaces[i]             
 
-    update myMesh  
+    update newMesh  
 
     -- Build up smoothing groups from incoming normals
     if chk_SetSmoothingGroups.checked then (
       local tools = (TopoTools      \
-        triObj:myMesh               \
+        triObj:newMesh               \
         faceCornerNormals:NrmlFaces \
         faceCornerVerts:VertFaces
       ) 
-      select myMesh
+      select newMesh
       tools.RebuildSmoothing() 
-      update myMesh
+      update newMesh
     )
 
     if (chk_SeeThru.checked) do
-      myMesh.xray = true
+      newMesh.xray = true
 
     if (chk_Debug.checked) do format "ok!\n"  
     
-    return myMesh
+    return newMesh
   )
-
-  fn MakeTexture n = (
-    local t = StandardMaterial \
-              name:           n \
-              shaderByName:   "blinn" \
-              adTextureLock:  true \
-              adLock:         true \
-              showInViewport: true
-    t.diffuseMapEnable = true
-    t.opacityMapEnable = true
-	
-    local extensions = #(".dds", ".raw", ".psd")
-    local basePath = dsGetOutputPath() + "\\" + (dsBuildContentLocation n)
-    local texturepath = ""
-    
-    found = false
-    for ext in extensions do (
-      texturepath = basePath + ext
-      if (doesFileExist texturepath) then (
-        if (chk_Debug.checked) do format "Found: %\n" texturepath         
-        found = true
-        exit
-      )
-    )
-    if not found then (
-      format "Can't locate texture for: %\n" basePath 
-      texturepath = basePath
-    )
-    
-    t.diffuseMap = BitmapTexture name:(n + "_diffuse") \
-                   filename:(texturepath)
-    t.opacityMap = BitmapTexture name:(n + "_opacity") \
-                   filename:(texturepath) \
-                   monoOutput: 1 \
-                   alphaSource: 0
-
-    return t
-  )
-
-
-  fn MakeMaterial = (
-    if (chk_Debug.checked) do format "debug: creating textures..."
-
-    -- TODO: Parse GAS and build up a material database (SS!)
-
-    -- create standard texture, or multi-material if needed
-    if (numTextures > 1) then (
-      myMat = MultiMaterial numSubs:numTextures
-      for i = 1 to numTextures do (
-        myMat.names[i] = textureName[i]
-        myMat.materialList[i] = MakeTexture textureName[i]
-      )
-    )
-    else (
-      myMat = MakeTexture textureName[1]
-    )
-
-    -- assign material to mesh
-    setMeditMaterial 1 myMat
-    myMesh.material = myMat
-
-    if (chk_Debug.checked) do format "ok!\n"    
-  )
-
 
   fn QuatApply v q = (
     m = q as Matrix3
@@ -924,24 +846,24 @@ rollout ASPImport "ASP Import"
   )
 
 
-  fn MakeSkin = (
+  fn MakeSkin newMesh = (
     local i,j,k
 
     if (chk_Debug.checked) do format "debug: creating skin..."
 
     max modify mode
-    select myMesh
+    select newMesh
     subObjectLevel = 0
 
     -- create skin, and add bones
     mySkin = Skin()
-    addModifier myMesh mySkin
+    addModifier newMesh mySkin
     for i = 1 to numBones do
       skinOps.addBone mySkin myBone[i] 0
 
     -- reset all vertex weights
     subObjectLevel = 1
-    allVerts = for j = 1 to myMesh.numVerts collect j
+    allVerts = for j = 1 to newMesh.numVerts collect j
     skinOps.SelectVertices mySkin allVerts
     skinOps.resetSelectedVerts mySkin
 
@@ -1009,24 +931,28 @@ rollout ASPImport "ASP Import"
 
     local isBrokenWorld = aspHeader.majorVersion == 5 and aspHeader.minorVersion == 1
 
-    MakeMesh flipVcoord:(isBrokenWorld or chk_FlipUV.checked)
+    local newbie = MakeMesh flipVcoord:(isBrokenWorld or chk_FlipUV.checked)
 
     if (chk_Texture.checked and numTextures > 0) do (
-      MakeMaterial()
+      local mtools = MaterialTools()
+      newbie.material = mtools.MakeMaterials textureNames debug:chk_Debug.checked
+      if (newbie.material != undefined) then (
+        setMeditMaterial 1 newbie.material
+      )      
     )
 
     if (chk_Bone.checked and numBones > 0) do (
       with undo off (      
         makeBones()
         if (chk_Skin.checked) do (
-          makeSkin()
+          newSkin = MakeSkin newbie  
         )
       )
     )
 
-    -- add siegemax specific things
-    select myMesh
-    addModifier myMesh (ASPModDef())
+    -- add siegemax specific things 
+    select newbie
+    addModifier newbie (ASPModDef())
 
     return true
   )
