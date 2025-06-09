@@ -20,28 +20,33 @@ struct MaterialTools (
     local extensions = #(".dds", ".raw", ".psd")
 
     -- Look in the user's bits, and any bitmap paths they've configured
-    local bitmapFolders = #(dsGetOutputPath()) + (for m in #{1..mapPaths.count()} collect (mapPaths.get m))    
+    local bitmapFolders = join #(dsGetOutputPath()) (for m in #{1..mapPaths.count()} collect (mapPaths.get m))    
     local texturepath = ""
     
     local found = false
+    if (debug) do format "locate: %\n"  (dsBuildContentLocation matName)         
     for folder in bitmapFolders do (
+        if (debug) do format "search: %\n" folder             
         local basePath = folder + "\\" + (dsBuildContentLocation matName)
         for ext in extensions do (
-            texturepath = basePath + ext
-            if (doesFileExist texturepath) then (
+            texturepath = basePath + ext  
+            if (debug) do format "Check: %\n" texturepath         
+            found = (getFiles texturepath).count == 1
+            if found then (
                 if (debug) do format "Found: %\n" texturepath         
-                found = true
                 exit
             )
         )
         if found then (
             exit
+        ) else (
+            texturepath = ""            
         )
     )
 
     if not found then (
-        if (debug) do format "Missing: %\n" rawpath 
-        texturepath = basePath
+        if (debug) do format "Missing: %\n"  (dsBuildContentLocation matName) 
+        texturepath = matName
     )
     
     t.diffuseMap = BitmapTexture name:(matName + "_diffuse") \
