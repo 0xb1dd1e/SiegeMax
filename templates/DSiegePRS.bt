@@ -1,0 +1,168 @@
+//------------------------------------------------
+//--- 010 Editor v14.0 Binary Template
+//
+//      File: DSiegePRS.bt
+//   Authors: biddle
+//   Version: pre-alpha PoC
+//   Purpose: A template for Dungeon Siege Animation files
+//  Category: Game
+// File Mask: *.prs
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+
+typedef struct {
+	char  Magic[4];
+	UBYTE MajorVersion;			
+	UBYTE MinorVersion;			
+	WORD  ExtraVersion;	
+} MARKER;
+
+typedef struct {
+    float x, y, z;
+} VEC3;
+
+typedef struct {
+    float x, y, z, w;
+} QUAT;
+
+typedef struct {
+    float u, v;
+} UV;
+
+typedef struct {
+    unsigned char R,G,B,A;  // could be ABGR?
+} RGBA;
+
+//** KEY DATA (***********************************************
+
+typedef struct {
+	float	Time; // Not normalized
+	QUAT	Rot;
+	VEC3	Pos;
+} sAnimRotPosKey;
+
+typedef struct {
+	float	Time;
+	QUAT	Rot;
+} sAnimRotKey;
+
+typedef struct {
+	float	Time;
+	VEC3	Pos;
+} sAnimPosKey;
+
+
+//** KEY LISTS ***********************************************
+
+typedef struct  {
+	MARKER ChunkName;					// "KLST"
+	DWORD	BoneIndex;		
+	DWORD	BoneNameOffset;
+	DWORD	NumberOfKeys;
+  if (NumberOfKeys > 0) {
+    sAnimRotPosKey RotPosKeys[NumberOfKeys];
+  }
+} sAnimKeyList_Chunk_deprecated <read=LookupString(BoneNameOffset)>;
+
+typedef struct {
+	MARKER ChunkName;					// "KLST"
+	DWORD	BoneIndex;		
+	DWORD	BoneNameOffset;
+	DWORD	NumberOfRotKeys;
+	DWORD	NumberOfPosKeys;
+  if (NumberOfRotKeys > 0) {
+    sAnimRotKey RotKeys[NumberOfRotKeys];
+  }  
+  if (NumberOfPosKeys > 0) {
+    sAnimPosKey PosKeys[NumberOfPosKeys];
+  }  
+} sAnimKeyList_Chunk <read=LookupString(BoneNameOffset)>;
+
+
+//** TRACK EVENT *********************************************
+typedef struct {
+	float	Time;             // Normalized event time
+	char	FourCC[4];
+} AnimNoteEvent ;
+
+//** NOTE LIST *********************************************
+
+typedef struct  {
+	MARKER ChunkName;					// "NOTE"
+	DWORD	NumberOfEvents;
+  if (NumberOfEvents > 0) {
+    AnimNoteEvent Events[NumberOfEvents];
+  }
+} AnimNoteList;
+
+//** TRACER LIST *********************************************
+
+typedef struct {
+	MARKER ChunkName;					// "TRCR"
+	DWORD	NumberOfTracers;
+	float	StartTime;
+	float	EndTime;
+} sAnimTracerList;
+
+//** TRACER ELEMENT*******************************************
+typedef struct {
+  VEC3 Pos;
+  VEC3 Row0;
+  VEC3 Row1;
+  VEC3 Row2;
+} sAnimTracerKey_Chunk;
+
+
+// PRS Header
+struct {
+  MARKER Header;
+  DWORD StringTableSize;
+  DWORD NumBones;
+  float Duration;
+  VEC3  LinearDisplacement;
+  QUAT  AngularDisplacement;
+  QUAT  HalfAngularDisplacement;  // disambiguate 180deg rotations
+  DWORD LoopAtEnd;                // always false (deprecated)
+} PRSFile;
+
+local int64 StringTableStart = FTell();
+string LookupString(DWORD offset) {    
+   return ReadString(StringTableStart+offset);   
+}
+char StringTable[PRSFile.StringTableSize];
+
+AnimNoteList Notes;
+
+local int version = (PRSFile.Header.MajorVersion * 1000) + PRSFile.Header.MinorVersion;
+
+if (version > 1000 && version <= 3000) {
+  // We have deprecated root keys (that we can usually ignore)
+  MARKER RKeyList;				// "RKEY"
+  if (version < 3000) {
+    DWORD NumRootKeys;    
+    sAnimRotPosKey rootKeys[NumRootKeys];
+  } 
+  else {
+    DWORD NumRotKeys;
+    DWORD NumPosKeys;
+    sAnimRotKey rootKeyRot[NumRotKeys];
+    sAnimPosKey rootKeyPos[NumPosKeys];
+  }
+}
+
+//	KeyLists
+if (version >= 3000) {
+  sAnimKeyList_Chunk BoneKeys[PRSFile.NumBones] <optimize=false>;
+}
+else {
+  sAnimKeyList_Chunk_deprecated BoneKeys[PRSFile.NumBones] <optimize=false>;
+}
+
+char EndMark[4]; // AEND
+
+char InfoMark[4]; // INFO
+DWORD NumInfoItems;
+struct {
+    string Item;
+} InfoItems[NumInfoItems] <optimize=false> ;
