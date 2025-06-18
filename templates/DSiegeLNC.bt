@@ -52,107 +52,186 @@ typedef struct {
 
 typedef struct {
     UINT8   id;
-	UINT32  flags <format=hex>;  
-	UINT16 numNodeConnections;    
+    UINT32  flags <format=hex>;  
+    UINT16  numNodeConnections;    
     if (numNodeConnections > 0) {
     	LNodeConnection nodeConnections[numNodeConnections];
     }  
 } LogicalSiegeNode <optimize=false>; 
 
 typedef struct {
-    DWORD   type;
-    DWORD   subType;
+    UINT32  type;
+    UINT32  subType;
     RGBA    color;
-    uint8   active;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
     float   innerRadius;
     float   outerRadius;
     float   intensity;
-	uint8	drawShadow;
-	uint8	occludeGeometry;
-	uint8	affectsActors;
-	uint8	affectsItems;
-	uint8	affectsTerrain;
-	uint8	onTimer;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+    UINT8   pad3,pad4;    
+} LightDescriptor5;
+
+typedef struct {
+    UINT32  type;
+    UINT32  subType;
+    RGBA    color;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+    UINT8   pad3,pad4,pad5;    
+} LightDescriptor6;
+
+typedef struct {
+    UINT32  type;
+    UINT32  subType;
+    RGBA    color;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+	UINT8	onTimer;    
+    UINT8   pad3,pad4;    
+} LightDescriptor9;
+
+
+typedef struct {
+    UINT32  type;
+    UINT32  subType;
+    RGBA    color;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+	UINT8	onTimer;
+    UINT8   pad3,pad4;    
 } LightDescriptor10;
 
 typedef struct {
-    DWORD   type;
-    DWORD   subType;
+    UINT32  type;
+    UINT32  subType;
     RGBA    color;
-    uint8   active;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;    
     float   innerRadius;
     float   outerRadius;
     float   intensity;
-	uint8	drawShadow;
-	uint8	occludeGeometry;
-	uint8	affectsActors;
-	uint8	affectsItems;
-	uint8	affectsTerrain;
-	uint8	onTimer;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+	UINT8	onTimer;
+    UINT8   pad3,pad4;    
     float   nearDistance;   // ver 11+
     float   farDistance;    // ver 11+  
 } LightDescriptor11;
 
 typedef struct {
-    DWORD   type;
-    DWORD   subType;
+    UINT32  type;
+    UINT32  subType;
     RGBA    color;
-    uint8   active;
-    uint8   pad0,pad1,pad2;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;
     float   innerRadius;
     float   outerRadius;
     float   intensity;
-    //float   maxIntensity;   // ver 12+    
-	uint8	drawShadow;
-	uint8	occludeGeometry;
-	uint8	affectsActors;
-	uint8	affectsItems;
-	uint8	affectsTerrain;
-	uint8	onTimer;
-    uint8   pad3,pad4;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+	UINT8	onTimer;
+    UINT8   pad3,pad4;
     float   nearDistance;
     float   farDistance;   
 } LightDescriptor12;
 
 typedef struct {
-    DWORD   type;
-    DWORD   subType;
+    UINT32  type;
+    UINT32  subType;
     RGBA    color;
-    uint8   active;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;    
     float   innerRadius;
     float   outerRadius;
     float   intensity;
-    float   maxIntensity;       // ver 12 or 13???
-	uint8	drawShadow;
-	uint8	occludeGeometry;
-	uint8	affectsActors;
-	uint8	affectsItems;
-	uint8	affectsTerrain;
-	uint8	onTimer;
+    float   maxIntensity;   // 13 or 14. Need a sample..
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
+	UINT8	onTimer;
+    UINT8   pad3,pad4;    
     float   nearDistance;
     float   farDistance; 
-    float   length;         // ver 13+   
+    float   length;         // ver 13+ (beam lights)
 } LightDescriptor13;
 
 typedef struct {
-    DWORD   type;
-    DWORD   subType;
+    UINT32  type;
+    UINT32  subType;
     RGBA    color;
-    uint8   active;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
     float   innerRadius;
     float   outerRadius;
     float   intensity;
     float   maxIntensity;
-	uint8	drawShadow;
-	uint8	occludeGeometry;
-	uint8	affectsActors;
-	uint8	affectsItems;
-	uint8	affectsTerrain;
-	uint8	onTimer;
-    float   m_AttenuationBias; // was nearDistance
+  	UINT8	drawShadow;
+    UINT8	occludeGeometry;
+  	UINT8	affectsActors;
+    UINT8	affectsItems;
+    UINT8	affectsTerrain;
+    UINT8	onTimer;
+    UINT8   pad3,pad4;        
+    float   attenuationBias; // was nearDistance
     float   farDistance; 
     float   length;         
 } LightDescriptor14;
+
+typedef struct {
+    UINT32  type;
+    UINT32  subType;
+    RGBA    color;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+    float   maxIntensity;
+  	UINT8	drawShadow;
+    UINT8	occludeGeometry;
+  	UINT8	affectsActors;
+    UINT8	affectsItems;
+    UINT8	affectsTerrain;
+    UINT8	onTimer;
+    UINT8   pad3,pad4;        
+    float   attenuationBias; 
+    float   farDistance; 
+    float   length;         
+} LightDescriptor15; // Space Siege
 
 typedef struct {
     UINT32  guid    <format=hex>;
@@ -160,21 +239,19 @@ typedef struct {
 } HotPoint;
 
 typedef struct {
-	// Lighting indices
-	UINT32   lightIndex1;
-	UINT32 	 lightIndex2;
-	UINT32   lightIndex3;
-	// Interpolation amounts
-	float    interpAmount1;
-	float    interpAmount2;
-	float    interpAmount3;
-}  LightInterpolant;
+    UINT32 lightIndex1;
+    UINT32 lightIndex2;
+    UINT32 lightIndex3;
+    float  interpAmount1;
+    float  interpAmount2;
+    float  interpAmount3;
+} LightInterpolant;
     
 typedef struct {
     VEC3    position;
-	UV      texcoord;
+    UV      texcoord;
     float   projectW;
-	LightInterpolant lightInterp;
+    LightInterpolant lightInterp;
 } DecalVertex;
        
 typedef struct {
@@ -207,10 +284,19 @@ typedef struct {
       
 typedef struct {
     UINT32  version;
-    UINT32  checksum <format=hex>;
+    
+    if (version >= 10) {     
+        UINT32  checksum <format=hex>;
+    } 
+    else {
+        UINT32 skip0[2]; // Not sure what the purpose was...
+        double skip1[3];
+    }
+    
     VEC3    minBox;
     VEC3    maxBox;
     UINT32  numLogicalNodes;
+    
     if (numLogicalNodes > 0) {
     	LogicalSiegeNode logicalNodes[numLogicalNodes];
     }
@@ -222,22 +308,46 @@ typedef struct {
             UINT32  guid    <format=hex>;
             VEC3    position;
             VEC3    direction;
-            if (version <= 10) {
-                LightDescriptor10 desc;
+            
+            // Most versions were transitional...
+            if (version < 5) {
+                // Not known
+            }                         
+            else if (version == 5) {
+                LightDescriptor5 desc;
+            }             
+            else if (version == 6) {
+                LightDescriptor6 desc;
+            }            
+            else if (version == 8) {
+                LightDescriptor9 desc; 
+            }            
+            else if (version == 9) {
+                LightDescriptor9 desc;
+            }            
+            else if (version == 10) {
+                LightDescriptor10 desc; // DS1
             } 
             else if (version == 11){
                 LightDescriptor11 desc;
             }
             else if (version == 12) {
-                LightDescriptor12 desc;
+                LightDescriptor12 desc;  // DS2
             }
             else if (version == 13) {
                 LightDescriptor13 desc;
             }
             else if (version == 14) {            
                 LightDescriptor14 desc;
+            } 
+            else if (version == 15) {            
+                LightDescriptor15 desc;  // SS1-ish
+            } 
+            else {
+                // TBD...
             }                
-            if (desc.affectsTerrain) {
+            if (version >= 10 && desc.affectsTerrain) {
+                // These lists contain the number to skip if value > 1.00001
                 if (numVertices > 0) {
                     float lightEffect[numVertices];
                     if (version > 11 && desc.occludeGeometry) {
@@ -248,15 +358,19 @@ typedef struct {
         } lights[numLights] <optimize=false>;
     }
     
-    UINT32  numHotPoints;   
-    if (numHotPoints > 0) {
-        HotPoint hotPoints[numHotPoints];
+    if (version >= 8) {
+        UINT32  numHotPoints;   
+        if (numHotPoints > 0) {
+            HotPoint hotPoints[numHotPoints];
+        }
     }
     
-    UINT32  numDecals;   
-    if (numDecals > 0) {
-        Decal decals[numDecals];
-    }    
+    if (version >= 9) {
+        UINT32  numDecals;   
+        if (numDecals > 0) {
+            Decal decals[numDecals];
+        }    
+    }
           
 } SiegeNode <optimize=false>;
 
