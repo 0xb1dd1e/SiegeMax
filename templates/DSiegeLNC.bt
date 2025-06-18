@@ -1,0 +1,265 @@
+//------------------------------------------------
+//--- 010 Editor v15.0.2 Binary Template
+//
+//      File: DSiegeLNC.bt
+//   Authors: biddle
+//   Version: pre-alpha PoC
+//   Purpose: A template for Dungeon Siege siege_nodes.lnc files
+//  Category: Game
+// File Mask: *.lnc
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+
+
+typedef struct {
+    float x, y, z;
+} VEC3;
+
+typedef struct {
+    float u, v;
+} UV;
+
+typedef struct {
+    VEC3 row0;
+    VEC3 row1;
+    VEC3 row2;
+} MAT33;
+
+typedef struct {
+    unsigned char R,G,B,A;  // could be ABGR?
+} RGBA;
+
+typedef struct {
+    UINT32  guid    <format=hex>;
+    UINT32  offset  <format=hex>;
+    UINT32  size;
+} LogicalTableEntry;
+
+typedef struct {
+    UINT16  localId;
+    UINT16  farId;
+} LNodalLeafConnect;
+
+typedef struct {
+    UINT32  farSiegeNode <format=hex>;
+    UINT8   farId;
+    UINT32  numLeafConnections;
+    if (numLeafConnections > 0) {
+    	LNodalLeafConnect leafConnections[numLeafConnections];
+    }    
+} LNodeConnection <optimize=false>;
+
+typedef struct {
+    UINT8   id;
+	UINT32  flags <format=hex>;  
+	UINT16 numNodeConnections;    
+    if (numNodeConnections > 0) {
+    	LNodeConnection nodeConnections[numNodeConnections];
+    }  
+} LogicalSiegeNode <optimize=false>; 
+
+typedef struct {
+    DWORD   type;
+    DWORD   subType;
+    RGBA    color;
+    uint8   active;
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	uint8	drawShadow;
+	uint8	occludeGeometry;
+	uint8	affectsActors;
+	uint8	affectsItems;
+	uint8	affectsTerrain;
+	uint8	onTimer;
+} LightDescriptor10;
+
+typedef struct {
+    DWORD   type;
+    DWORD   subType;
+    RGBA    color;
+    uint8   active;
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	uint8	drawShadow;
+	uint8	occludeGeometry;
+	uint8	affectsActors;
+	uint8	affectsItems;
+	uint8	affectsTerrain;
+	uint8	onTimer;
+    float   nearDistance;   // ver 11+
+    float   farDistance;    // ver 11+  
+} LightDescriptor11;
+
+typedef struct {
+    DWORD   type;
+    DWORD   subType;
+    RGBA    color;
+    uint8   active;
+    uint8   pad0,pad1,pad2;
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+    //float   maxIntensity;   // ver 12+    
+	uint8	drawShadow;
+	uint8	occludeGeometry;
+	uint8	affectsActors;
+	uint8	affectsItems;
+	uint8	affectsTerrain;
+	uint8	onTimer;
+    uint8   pad3,pad4;
+    float   nearDistance;
+    float   farDistance;   
+} LightDescriptor12;
+
+typedef struct {
+    DWORD   type;
+    DWORD   subType;
+    RGBA    color;
+    uint8   active;
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+    float   maxIntensity;       // ver 12 or 13???
+	uint8	drawShadow;
+	uint8	occludeGeometry;
+	uint8	affectsActors;
+	uint8	affectsItems;
+	uint8	affectsTerrain;
+	uint8	onTimer;
+    float   nearDistance;
+    float   farDistance; 
+    float   length;         // ver 13+   
+} LightDescriptor13;
+
+typedef struct {
+    DWORD   type;
+    DWORD   subType;
+    RGBA    color;
+    uint8   active;
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+    float   maxIntensity;
+	uint8	drawShadow;
+	uint8	occludeGeometry;
+	uint8	affectsActors;
+	uint8	affectsItems;
+	uint8	affectsTerrain;
+	uint8	onTimer;
+    float   m_AttenuationBias; // was nearDistance
+    float   farDistance; 
+    float   length;         
+} LightDescriptor14;
+
+typedef struct {
+    UINT32  guid    <format=hex>;
+    VEC3    position;
+} HotPoint;
+
+typedef struct {
+	// Lighting indices
+	UINT32   lightIndex1;
+	UINT32 	 lightIndex2;
+	UINT32   lightIndex3;
+	// Interpolation amounts
+	float    interpAmount1;
+	float    interpAmount2;
+	float    interpAmount3;
+}  LightInterpolant;
+    
+typedef struct {
+    VEC3    position;
+	UV      texcoord;
+    float   projectW;
+	LightInterpolant lightInterp;
+} DecalVertex;
+       
+typedef struct {
+    UINT32  guid    <format=hex>;
+    UINT32  numVertices;
+    if (numVertices > 0) {
+        DecalVertex verts[numVertices];
+    }
+} DecalSet <optimize=false>;
+
+typedef struct {
+    UINT32  version;
+    if (version >= 2) {
+        float levelOfDetail;
+    }
+    UINT8   activeState;
+    BYTE    alpha;
+    VEC3    position;
+    MAT33   orientation;
+    float   angle;
+    float   aspect;
+    float   nearPlane;
+    float   farPlane;
+    string  decalTex;
+    UINT32  numDecalSets;
+    if (numDecalSets > 0) {
+        DecalSet decalSets[numDecalSets];
+    } 
+} Decal <optimize=false>;
+      
+typedef struct {
+    UINT32  version;
+    UINT32  checksum <format=hex>;
+    VEC3    minBox;
+    VEC3    maxBox;
+    UINT32  numLogicalNodes;
+    if (numLogicalNodes > 0) {
+    	LogicalSiegeNode logicalNodes[numLogicalNodes];
+    }
+    
+    UINT32  numVertices;
+    UINT32  numLights;
+    if (numLights > 0) {
+        struct {
+            UINT32  guid    <format=hex>;
+            VEC3    position;
+            VEC3    direction;
+            if (version <= 10) {
+                LightDescriptor10 desc;
+            } 
+            else if (version == 11){
+                LightDescriptor11 desc;
+            }
+            else if (version == 12) {
+                LightDescriptor12 desc;
+            }
+            else if (version == 13) {
+                LightDescriptor13 desc;
+            }
+            else if (version == 14) {            
+                LightDescriptor14 desc;
+            }                
+            if (desc.affectsTerrain) {
+                if (numVertices > 0) {
+                    float lightEffect[numVertices];
+                    if (version > 11 && desc.occludeGeometry) {
+                        float shadowEffect[numVertices];
+                    }
+                }
+            }
+        } lights[numLights] <optimize=false>;
+    }
+    
+    UINT32  numHotPoints;   
+    if (numHotPoints > 0) {
+        HotPoint hotPoints[numHotPoints];
+    }
+    
+    UINT32  numDecals;   
+    if (numDecals > 0) {
+        Decal decals[numDecals];
+    }    
+          
+} SiegeNode <optimize=false>;
+
+UINT32 numEntries;
+LogicalTableEntry mapOffsets[numEntries];
+SiegeNode theNodes[numEntries];
