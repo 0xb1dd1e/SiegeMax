@@ -13,11 +13,13 @@
 --  5/17/2025 biddle - search for DDS textures
 --  6/07/2025 biddle - handle doors with redundant edges
 --  6/08/2025 biddle - handle doors with illegal verts, unify material loading
+--  6/21/2025 biddle - recover shortest path on doors that have been damaged
 --
 -------------------------------------------------------------------------------------------
 
 
 filein ((GetDir #scripts) +"\\TopoTools.ms")
+filein ((GetDir #scripts) +"\\SearchTools.ms")
 filein ((GetDir #scripts) +"\\MaterialTools.ms")
 
 rollout SNOImport "SNO Import"
@@ -105,7 +107,7 @@ rollout SNOImport "SNO Import"
     u = Quantize (ReadFloat fin) 1024
     v = Quantize (ReadFloat fin) 1024
     return point3 u v 0 
-  )  
+  )
 
   fn ReadNormal fin = (
     -- Actual per corner normal values aren't re-used. 
@@ -163,7 +165,7 @@ rollout SNOImport "SNO Import"
     h.numSpots      = ReadLong fin #unsigned
 
     h.numCorners    = ReadLong fin
-    h.numFaces		= ReadLong fin
+    h.numFaces  		= ReadLong fin
     h.numSurfaces   = ReadLong fin
 
     h.minBBox       = ReadVector fin
@@ -517,6 +519,19 @@ rollout SNOImport "SNO Import"
       if (chk_Debug.checked) do format "Collecting edge for door vert set %\n" doorVertSet
 
       local doorEdges = snomod.collectDoorEdgesForVerts myMesh doorVertSet
+ 
+      if (doorEdges.count == 0) then (
+        if (doorVertSet.numberset == 2) then (
+          dva = (doorVertset as array)
+          format "Door verts are too sparse! We need the shortest boundary path between two verts: %\n" dva
+          local helper = SearchTools()
+          pathVerts = helper.FindShortestOpenPath myMesh dva[1] dva[2]
+          doorEdges = snomod.collectDoorEdgesForVerts myMesh (pathVerts as BitArray)
+        ) 
+        else (
+          format "Door verts are mangled %\n" doorVertSet
+        )
+      )
 
       if (chk_Debug.checked) do (      
         format "Door #% has these verts % (%)\n" d doorVertSet doorVertSet.numberset
@@ -663,8 +678,14 @@ rollout SNOImport "SNO Import"
              vertices:    dataLookup.pos \
              faces:       VertFaces \             
              materialIDs: MatiFaces    
-			 
+
     -- Set the texture verts and faces
+
+    if (dataHeader.majorVersion >= 8) then (
+      -- For DS2, texture format was changed from RAW to DDS
+      for i = 1 to dataLookup.txc.count do dataLookup.txc[i].y = (1.0 - dataLookup.txc[i].y)
+    )
+                   
     setNumTVerts myMesh dataLookup.txc.count 
     for i = 1 to dataLookup.txc.count do setTVert myMesh i dataLookup.txc[i]
     buildTVFaces myMesh
@@ -793,5 +814,6 @@ listener one-liner to reload the WIP
 clearlistener(); filein ((GetDir #scripts) +"\\plugins\\sno_mod.ms"); filein ((GetDir #scripts) +"\\SNOTools.ms"); filein ((GetDir #scripts) +"\\SNOImport.ms"); lanceImportSNO(); setListenerSel #(0,0)
 
 Problem files:
-t_dm01_track_cave-08-sides
+t_0Agallan01_main-path-01
+t_0Agallan01_main-path-02
 */

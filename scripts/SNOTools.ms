@@ -116,6 +116,11 @@ fn CalcDoorOutDir obj selDoor canFlipBackwardsDoor forceDir ReportLoopyDoors:fal
 		)
 	)
 
+	if selDoor.verts.count < 2 then	(
+		MessageBox "This is a poor set of door verts, they aren't connected by any edges"
+		return  [1, 0, 0]
+	)
+
 	local pointA = getvert obj selDoor.verts[1]
 	local pointB = getvert obj selDoor.verts[selDoor.verts.count]
 

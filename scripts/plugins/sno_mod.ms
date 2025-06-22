@@ -89,8 +89,13 @@ category:"Siege Max"
 			)
 		)
 
+		if (edgeList.count == 0) then (
+			format "Door verts are too sparse! We need the shortest boundary path between %\n" doorVertSet
+			return edgeList
+		)
+
 		-- While we have more than the minimal spanning set of edges
-		-- Remove a edge that revisit a verts
+		-- find and remove an edge that revisit a vert.
 		local redundant = #{}
 		local fanout = #()
 
