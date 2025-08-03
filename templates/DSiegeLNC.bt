@@ -104,10 +104,26 @@ typedef struct {
 	UINT8	affectsActors;
 	UINT8	affectsItems;
 	UINT8	affectsTerrain;
+    UINT8   pad3,pad4,pad5;    
+} LightDescriptor8;
+
+typedef struct {
+    UINT32  type;
+    UINT32  subType;
+    RGBA    color;
+    UINT8   active;
+    UINT8   pad0,pad1,pad2;        
+    float   innerRadius;
+    float   outerRadius;
+    float   intensity;
+	UINT8	drawShadow;
+	UINT8	occludeGeometry;
+	UINT8	affectsActors;
+	UINT8	affectsItems;
+	UINT8	affectsTerrain;
 	UINT8	onTimer;    
     UINT8   pad3,pad4;    
 } LightDescriptor9;
-
 
 typedef struct {
     UINT32  type;
@@ -289,8 +305,13 @@ typedef struct {
         UINT32  checksum <format=hex>;
     } 
     else {
-        UINT32 skip0[2]; // Not sure what the purpose was...
-        double skip1[3];
+        struct {
+            UINT32  numTris;
+	        UINT32  numVerts;
+            double  xSum;
+            double  ySum;
+            double  zSum;
+        } CheckSum;
     }
     
     VEC3    minBox;
@@ -303,9 +324,16 @@ typedef struct {
     
     UINT32  numVertices;
     UINT32  numLights;
+    
+    if (version <= 8) {
+        UINT32  guid    <format=hex>;
+    }    
+    
     if (numLights > 0) {
         struct {
-            UINT32  guid    <format=hex>;
+            if (version > 8) {
+                UINT32  guid    <format=hex>;
+            }
             VEC3    position;
             VEC3    direction;
             
@@ -320,7 +348,7 @@ typedef struct {
                 LightDescriptor6 desc;
             }            
             else if (version == 8) {
-                LightDescriptor9 desc; 
+                LightDescriptor8 desc; 
             }            
             else if (version == 9) {
                 LightDescriptor9 desc;

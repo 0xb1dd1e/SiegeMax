@@ -323,23 +323,23 @@ struct ASP_SubMeshes {
         sTriangle_Chunk         Triangles[TriListInfo.NumberOfTriangles];     
         
         sBoneVertData_Chunk     BoneVertDataInfo;
-        
-        // A rigid mesh will not have weights, just -1 or 0 for the index
-        // Need to figure out how to check for animation bones with no verts.
-        // Not sure if there were any like this exported.
-        if (Info.Header.NumberOfBones == 1) {
-            int ONLY_BONE;
-        }
-        else {
-            struct ASP_BoneWeights {
-                DWORD NumberOfPairs;
-                struct sBoneVertWeightPair { 
+             
+        struct ASP_BoneWeights {
+            int NumberOfPairs;
+            if (NumberOfPairs == -1) {
+                // This is the primary bone of rigid mesh, all verts are weighted to it.
+            }
+            else if (NumberOfPairs == 0) {
+                // This is an unweighted bone.
+            }
+            else {
+                struct sBoneVertWeightPair {
                     DWORD index;
                     float weight;
-                 } BoneVertWeights[NumberOfPairs] <optimize=false>;
-            } BoneWeightList[Info.Header.NumberOfBones] <optimize=false>;
-        }
-            
+                } BoneVertWeights[NumberOfPairs] <optimize=false>;
+            }
+        } BoneWeightList[Info.Header.NumberOfBones] <optimize=false>;
+
         if (!((Info.Header.MajorVersion < 1) || (Info.Header.MajorVersion == 1 && Info.Header.MinorVersion < 4))) {            
 			sStitchSetHeader_Chunk StitchSetListInfo;      
             struct {
