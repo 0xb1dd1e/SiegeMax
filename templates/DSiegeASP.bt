@@ -316,7 +316,10 @@ struct ASP_SubMeshes {
 		if ((Info.Header.MajorVersion > 2) || (Info.Header.MajorVersion == 2 && Info.Header.MinorVersion >= 2)) {
             struct {
                 DWORD vertSpanStart;
-                DWORD vertSpanLength;            
+                // Check for missing span length bug
+                if ((Info.Header.MajorVersion > 2) || (Info.Header.MajorVersion == 2 && Info.Header.MinorVersion > 2)) {
+                    DWORD vertSpanLength;            
+                }
             } TriListSections[MaterialInfo.NumberOfMaterials];
         }
         
