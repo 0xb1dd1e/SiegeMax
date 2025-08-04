@@ -10,6 +10,7 @@
 --  5/24/2025 biddle - Optimize faces and add smoothing groups
 --  5/25/2025 biddle - Sort out D3D indexed sub-ranges, optimization, skinning
 --  6/08/2025 biddle - Unify material loading
+--  8/03/2025 biddle - Check for buggy vertex span length
 --
 -------------------------------------------------------------------------------------------
 
