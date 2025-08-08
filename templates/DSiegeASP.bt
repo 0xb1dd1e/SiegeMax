@@ -332,11 +332,16 @@ struct ASP_SubMeshes {
         }
         else {
             struct ASP_BoneWeights {
-                DWORD NumberOfPairs;
-                struct sBoneVertWeightPair { 
-                    DWORD index;
-                    float weight;
-                 } BoneVertWeights[NumberOfPairs] <optimize=false>;
+                int NumberOfPairs;
+                if (NumberOfPairs > 0) {
+                    struct sBoneVertWeightPair { 
+                        DWORD index;
+                        float weight;
+                    } BoneVertWeights[NumberOfPairs] <optimize=false>;
+                } 
+                else {
+                    // NumberOfPairs will be -1 for primary bone
+                }
             } BoneWeightList[Info.Header.NumberOfBones] <optimize=false>;
         }
             
