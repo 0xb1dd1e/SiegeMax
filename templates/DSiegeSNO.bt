@@ -71,7 +71,16 @@ typedef struct {
 	VEC3    normal;
 	RGBA    color;
 	UV      uv;
-} SNO_Vertex;
+} SNO_Vertex8;
+
+typedef struct {
+	VEC3    position;
+	VEC3    normal;
+	VEC3    tangent;
+	VEC3    bitangent;
+	RGBA    colour;    
+	UV      uv;    
+} SNO_Vertex9;
 
 typedef struct {
     string  texname;
@@ -158,10 +167,15 @@ SNO_Door    doors[header.numDoors];
 
 if (header.numSpots) {
     SNO_Spot spots[header.numSpots];
-}
+};
 
-SNO_Vertex  corners[header.numCorners];
-SNO_Stage   surfaces[header.numSurfaces];
+if (header.majorVersion >= 9) {
+    SNO_Vertex9  corners[header.numCorners];
+}
+else {
+    SNO_Vertex8  corners[header.numCorners];
+}
+SNO_Stage    surfaces[header.numSurfaces];
 
 /// Pathing and BSP info (walkable/water/floor flags)
 UINT32      numLogicalNodes;

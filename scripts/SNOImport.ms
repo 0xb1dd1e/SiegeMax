@@ -14,6 +14,7 @@
 --  6/07/2025 biddle - handle doors with redundant edges
 --  6/08/2025 biddle - handle doors with illegal verts, unify material loading
 --  6/21/2025 biddle - recover shortest path on doors that have been damaged
+--  8/03/2025 biddle - don't crash when 'see through' is on
 --
 -------------------------------------------------------------------------------------------
 
@@ -685,7 +686,7 @@ rollout SNOImport "SNO Import"
       -- For DS2, texture format was changed from RAW to DDS
       for i = 1 to dataLookup.txc.count do dataLookup.txc[i].y = (1.0 - dataLookup.txc[i].y)
     )
-                   
+  
     setNumTVerts myMesh dataLookup.txc.count 
     for i = 1 to dataLookup.txc.count do setTVert myMesh i dataLookup.txc[i]
     buildTVFaces myMesh
@@ -706,7 +707,7 @@ rollout SNOImport "SNO Import"
     -- and miscellaneous stuff
     myMesh.wirecolor = (color 0 0 153)
     if (chk_SeeThru.checked) do
-      myMesh[sm].xray = true
+      myMesh.xray = true
 
     return myMesh
   )

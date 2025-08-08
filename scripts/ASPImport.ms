@@ -10,6 +10,7 @@
 --  5/24/2025 biddle - Optimize faces and add smoothing groups
 --  5/25/2025 biddle - Sort out D3D indexed sub-ranges, optimization, skinning
 --  6/08/2025 biddle - Unify material loading
+--  8/03/2025 biddle - Check for buggy vertex span length
 --
 -------------------------------------------------------------------------------------------
 
@@ -455,7 +456,7 @@ rollout ASPImport "ASP Import"
     if (chk_Debug.checked) do format "ok!\n" 
   )
 
-  fn ReadBTRI fin SupportSubMeshRanges = (
+  fn ReadBTRI fin SupportSubMeshRanges MayHaveSpanLenBug = (
     if (chk_Debug.checked) do format "debug: reading BTRI section..."
 
     if (subMesh[curSM].numFaces != ReadLong fin) do (
@@ -471,7 +472,13 @@ rollout ASPImport "ASP Import"
     for i = 1 to subMesh[curSM].dataBSMM.count do (
       if SupportSubMeshRanges then (
         subMesh[curSM].dataBTRI.cornerStart[i] = ReadLong fin
-        subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
+        if (MayHaveSpanLenBug and (subMesh[curSM].dataBSMM.count == 1) and (subMesh[curSM].dataBTRI.cornerStart[i] == 0)) then (
+          -- A bug in the 2.2 exporter may have omitted the span length? --biddle
+          subMesh[curSM].dataBTRI.cornerSpan[i] = 0
+        )
+        else (
+          subMesh[curSM].dataBTRI.cornerSpan[i] = ReadLong fin
+        )
       )
       else (
         subMesh[curSM].dataBTRI.cornerStart[i] = 0
@@ -622,7 +629,9 @@ rollout ASPImport "ASP Import"
         ReadWCRN fin (header.majorVersion < 5)
       ) 
       else if (header.mark == "BTRI") then (
-        ReadBTRI fin ((header.majorVersion > 2) or (header.majorVersion == 2 and header.minorVersion >= 2))
+        useRanges = ((header.majorVersion > 2) or (header.majorVersion == 2 and header.minorVersion >= 2))
+        checkForBug = ((header.majorVersion < 2) or (header.majorVersion == 2 and header.minorVersion == 2))
+        ReadBTRI fin useRanges checkForBug
       )    
       else if (header.mark == "BEND") then (ReadBEND fin; exit)
       else (
