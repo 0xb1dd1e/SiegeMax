@@ -26,6 +26,10 @@ typedef struct {
     float x, y, z, w;
 } QUAT;
 
+typedef struct {
+    unsigned char R,G,B,A;
+} RGBA;
+
 
 //** KEY DATA (***********************************************
 
@@ -90,7 +94,7 @@ typedef struct  {
 } AnimNoteList;
 
 
-//** TRACER ELEMENT*******************************************
+//** TRACER ELEMENT *******************************************
 typedef struct {
   VEC3 Pos;
   VEC3 Row0;
@@ -99,17 +103,42 @@ typedef struct {
 } sAnimTracerKey;
 
 
-//** TRACER LIST *********************************************
+//** TRACER LIST (before v5.0) *********************************************
 
 typedef struct {
-	MARKER ChunkName;					// "TRCR"
-	DWORD	NumberOfKeys;
-	float	StartTime;
-	float	EndTime;
-    if (NumberOfKeys > 0) {
-        sAnimTracerKey Transforms[NumberOfKeys];
-    }
-} sAnimTracerList;
+  MARKER ChunkName;					// "TRCR"
+  DWORD	NumberOfKeys;
+  float	StartTime;
+  float	EndTime;
+  if (NumberOfKeys > 0) {
+    sAnimTracerKey Transforms[NumberOfKeys];
+  }
+} sAnimTracerList1;
+
+//** TRACER LIST (version 5.0) *********************************************
+
+typedef struct {
+  DWORD TracerType;
+  float StartTime;
+  float EndTime;
+  RGBA  RGBColor0;
+  RGBA  RGBColor1;
+  VEC3  TracerPoint0;
+  VEC3  TracerPoint1;
+  DWORD NumberOfKeys;
+  if (NumberOfKeys > 0) {
+    sAnimTracerKey Transforms[NumberOfKeys];
+  }
+} sAnimTracerSegment ;
+
+typedef struct {
+  MARKER ChunkName;					// "TRCR" (version v5.0+)
+  DWORD	NumberOfSegments;
+  if (NumberOfSegments > 0) {
+    sAnimTracerSegment Segments[NumberOfSegments] <optimize=false>;
+  }
+} sAnimTracerList2;
+
 
 // PRS Header
 struct {
@@ -137,7 +166,12 @@ AnimNoteList Notes;
 // Not all anims have tracer keys
 local string MaybeTracers = ReadString(FTell(),4);
 if (MaybeTracers == "TRCR") {
-    sAnimTracerList WeaponTracerKeys;
+    if (version < 5000) {
+        sAnimTracerList1 WeaponTracers;
+    }
+    else {
+        sAnimTracerList2 WeaponTracers;
+    }
 }
 
 if (version > 1000 && version <= 3000) {

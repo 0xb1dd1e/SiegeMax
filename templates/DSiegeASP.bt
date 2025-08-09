@@ -357,6 +357,10 @@ struct ASP_RestPose {
     sRestPoseBoneData Bones[Header.NumberOfBones];
 } RestPose;
 
-sBoundingBox_Chunk BoundingBoxData;
+local string MaybeBoxes = ReadString(FTell(),4);
+if (MaybeBoxes == "BBOX") {
+    sBoundingBox_Chunk BoundingBoxData;
+}
+
 sEnd_Chunk EndMark;
 sInfoMark_Chunk InfoMark;
