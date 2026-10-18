@@ -11,6 +11,7 @@
 --  5/25/2025 biddle - Sort out D3D indexed sub-ranges, optimization, skinning
 --  6/08/2025 biddle - Unify material loading
 --  8/03/2025 biddle - Check for buggy vertex span length
+-- 10/17/2026 biddle - Add the Stitch Sets to ASP Modifier.
 --
 -------------------------------------------------------------------------------------------
 
@@ -546,7 +547,7 @@ rollout ASPImport "ASP Import"
       subMesh[curSM].dataSTCH[i].vertexCount = ReadLong fin
       subMesh[curSM].dataSTCH[i].vertexIndex = #()
       for j = 1 to subMesh[curSM].dataSTCH[i].vertexCount do (
-        subMesh[curSM].dataSTCH[i].vertexIndex[j] = (ReadLong fin)
+        subMesh[curSM].dataSTCH[i].vertexIndex[j] = ((ReadLong fin)+1)
       )
     )
     if (chk_Debug.checked) do format "ok!\n"
@@ -961,7 +962,32 @@ rollout ASPImport "ASP Import"
 
     -- add siegemax specific things 
     select newbie
-    addModifier newbie (ASPModDef())
+
+    -- Add the modifier to the new mesh
+    -- Create an ASP modifier
+
+    aspMod = ASPModDef()
+    addModifier newbie aspMod
+
+    -- add any StitchSets
+
+    ssetTags = #()
+    ssetVerts = #()
+
+    for sm in subMesh do (
+        for sset in sm.dataSTCH do (
+            if chk_Debug.checked do format "Adding sset: % --> %\n" (sset.token as string) sset
+            if (sset.vertexCount > 0) then
+            (
+                append ssetTags sset.token
+                append ssetVerts sset.vertexCount
+                ssetVerts = join ssetVerts sset.vertexIndex
+            )			
+        )
+    )
+
+    aspMod.StitchTagList = ssetTags
+    aspMod.StitchVertList = ssetVerts
 
     return true
   )
