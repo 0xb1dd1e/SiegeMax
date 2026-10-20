@@ -100,6 +100,58 @@ fn SetTaggedStitchVerts pMesh tag verts = (
 	
 )
 
+----------------------------------------------------------------------------------------
+fn SetHelmetWeights pMesh neckVerts = (
+	local mySkin, myHead, myHeadIdx, mySpine, mySpineIdx
+
+	max modify mode
+	select pMesh
+	subObjectLevel = 0
+
+	-- find skin and from that, the spine and head bones.
+	mySkin = pMesh.modifiers[#skin] 
+	myHead = $'Bip01_Head'
+	mySpine = undefined; for b in $'Bip01_Spine*' do mySpine = b
+
+	if (modPanel.getCurrentObject() != mySkin) then modPanel.setCurrentObject mySkin
+
+	-- get the indices of the two bones in the skin modifier
+	for b = 1 to (skinops.getnumberbones mySkin) do (
+		bn = (skinops.getbonename mySkin b 0)
+		if bn == myHead.name then (
+			myHeadIdx = b
+		)
+		else if bn == mySpine.name then (
+			mySpineIdx = b
+		)
+	)	
+
+	-- reset all vertex weights
+	subObjectLevel = 1
+	allVerts = for v = 1 to pMesh.numVerts collect v
+
+	-- the neck vert are weighted to the top of the spine
+	-- the rest of the helmet is weighted to the head
+	with redraw off
+	(
+		skinOps.SelectVertices mySkin allVerts
+		skinOps.resetSelectedVerts mySkin
+		for v in allVerts do (	
+			if (findItem neckVerts v) > 0 then (
+				skinOps.ReplaceVertexWeights mySkin v #(mySpineIdx) #(1.0)
+			) else (
+				-- Don't apply this if the rest of the helmet is okay
+				-- Some have special weighting to arms and ponytail/beard
+				skinOps.ReplaceVertexWeights mySkin v #(myHeadIdx) #(1.0)
+			)
+		)
+	)
+
+	subObjectLevel = 0
+	deselect $
+	max utility mode
+)
+
 --**************************************************************
 
 
@@ -129,9 +181,11 @@ rollout StitchNeckTools "Neck Stitching"  (
 	
 	button ResetNeckVerts	"Reset the Neck verts"
 	
+	button SelectNeckVerts	"Add Mesh_Select with verts"
+	
+	button RunNeckWeightReset	"Reset Helmet/Neck Weighting"
 	label NeckCount "0 Neck Verts"
 	
-	button SelectNeckVerts	"Add Mesh_Select with verts"
 	
 	----------------------------------
 	
@@ -161,6 +215,7 @@ rollout StitchNeckTools "Neck Stitching"  (
 			DelNeckVerts.enabled = false 
 			ResetNeckVerts.enabled = true
 			SelectNeckVerts.enabled = false
+			RunNeckWeightReset.enabled = false
 			NeckMesh = undefined
 		)
 		catch()
@@ -180,7 +235,8 @@ rollout StitchNeckTools "Neck Stitching"  (
 		
 		try (
 		
-			NeckVerts = GetTaggedStitchVerts LoadMesh "NECK"
+			NeckVerts = GetTaggedStitchVerts LoadMesh "NECK"
+
 			
 			NeckMesh = LoadMesh 
 			for v = 1 to NeckVerts.count do (
@@ -269,7 +325,8 @@ rollout StitchNeckTools "Neck Stitching"  (
 		try (delete NeckMarkers) catch ()
 		try (delete NeckTextMarkers) catch ()
 		
-		NeckChangeHandler = undefined
+		NeckChangeHandler = undefined
+
 		NeckDeleteHandler = undefined
 		NeckMarkers		  = undefined
 		NeckTextMarkers	  = undefined
@@ -357,6 +414,7 @@ rollout StitchNeckTools "Neck Stitching"  (
 		
 		DelNeckVerts.Enabled = false
 		SelectNeckVerts.enabled = false
+		RunNeckWeightReset.Enabled = false
 		
 	)
 	
@@ -606,7 +664,12 @@ rollout StitchNeckTools "Neck Stitching"  (
 		)
 		
 	)
-		
+	
+	on RunNeckWeightReset pressed do (
+		if (queryBox "Are you sure? Have you saved your work?\n\nThis will clobber the skin weights!" title:"Set Helmet and Neck Weights") then (
+        	SetHelmetWeights NeckMesh NeckVerts
+		)
+	)
 
 )
 
@@ -619,3 +682,10 @@ fn OpenNeckToolkit =
 	necktoolfloater = newRolloutFloater "Stitch Tools"  180 237 800 100
 	addrollout StitchNeckTools necktoolfloater 
 )
+
+/*
+QoL helper, keep this in the Listener panel while debugging
+
+clearlistener(); filein ((GetDir #scripts) +"\\StitchTools.ms"); OpenNeckToolkit(); setListenerSel #(0,0)
+
+*/
