@@ -139,6 +139,26 @@ Files: `scripts/RigTools/RigBake.ms`.
 - Help pages in `scripts/HelpTools.ms`.
 - Bump `SIEGEMAX_TOOLKIT_MINOR_VERSION` (2.21 → 2.22).
 
+## Status
+
+| Step | State |
+|---|---|
+| Phase 1: COM helper, promote skeleton, role detection, rest pose, Figure Mode | **Written, not yet run in gmax.** `scripts/plugins/SiegeRigCOM.ms`, `scripts/RigTools/RigBuilder.ms`, `scripts/Add-Ons/InstallSiegeRig.ms` |
+| Phase 2 onward | Not started |
+
+Phase 1 is installed as an Add-On (no core file is modified): copy the three
+files into the matching folders under `gmax/gamepacks/SiegeMax/Scripts/` and
+restart gmax. Then use Customize > Customize User Interface, category
+"Siege Rig Tools", action "SiegeRig".
+
+Phase 1 limits worth knowing:
+- Figure Mode edits with Animate off, which shifts all keys of an animated
+  bone (standard Max behaviour). Animated bones keep their stored rest pose.
+- Promoting a skeleton never relinks, renames or re-controls a bone, so
+  export is unchanged.
+- Roles are detected from bone names; unrecognised bones get no role and can
+  be assigned in the panel.
+
 ## Order and milestones
 
 1. **M1 (usable):** Phases 1, 2, 7 → rig a DS character, animate limbs with IK,
