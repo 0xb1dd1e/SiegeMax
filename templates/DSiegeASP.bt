@@ -76,7 +76,7 @@ typedef struct sNeMaSubMesh_Chunk {
 	UBYTE MinorVersion;			
 	WORD  ExtraVersion;	
 	
-	DWORD SubMeshID;	
+	int   SubMeshID;	
 	DWORD NumberOfSubMeshMaterials;	
 	DWORD NumberOfSubMeshVerts;
 	DWORD NumberOfSubMeshCorners;
@@ -165,12 +165,12 @@ typedef struct sCornerList_Chunk {
 	DWORD NumberOfCorners;
 };
 
-typedef struct sCorner_Chunk {
-	DWORD     i;						// Index into vertex table
-	VEC3      normal;				    // Normal
-	RGBA      color;					// Color
-	RGBA      specular;					// Specular color, not currently used
-	UV        uv;						// Tex coordinate set
+typedef struct sLitCorner_Chunk {
+	DWORD     i;				// Index into vertex table
+	VEC3      normal;			// Normal
+	RGBA      color;			// Color
+	RGBA      specular;			// Specular color, not currently used
+	UV        uv;				// Tex coordinate set
 };
 
 typedef struct sWeightedCorner_Chunk {
@@ -254,12 +254,14 @@ typedef struct sBoundingBox_Chunk {
 	UBYTE	MinorVersion;
     WORD	ExtraVersion; 
     DWORD   BoxCount; 
-    struct Box {
-        CHUNKID Name;
-        VEC3 Position;
-        QUAT Orientation;
-        VEC3 HalfDiag;
-    } Boxes[BoxCount];
+    if (BoxCount > 0) {
+        struct Box {
+            CHUNKID Name;
+            VEC3 Position;
+            QUAT Orientation;
+            VEC3 HalfDiag;
+        } Boxes[BoxCount];
+    }
 };
 
 typedef struct sEnd_Chunk {
@@ -270,7 +272,9 @@ typedef struct sEnd_Chunk {
 typedef struct sInfoMark_Chunk {
 	CHUNKID ChunkName;                   // "INFO"			
     DWORD NumStrings;
-    char Marker[8];
+    struct {
+        string item;
+    } InfoItems[NumStrings] <optimize=false>;
 };
 
 //**==========================================================
@@ -297,19 +301,18 @@ struct ASP_SubMeshes {
         sVertList_Chunk         VertListInfo;
         VEC3                    Vertices[VertListInfo.NumberOfVerts];
         
-        if ((Info.Header.MajorVersion < 1) || (Info.Header.MajorVersion == 1 && Info.Header.MinorVersion < 3)) {
-            sCornerList_Chunk   CornerListInfo;
-            sCorner_Chunk       Corners[CornerListInfo.NumberOfCorners];
-        } else {
-            if (Info.Header.MajorVersion < 4) {
-                sCornerList_Chunk   CornerListInfo;
-                sCorner_Chunk       Corners[CornerListInfo.NumberOfCorners];
-            }
-            sCornerList_Chunk       WCornerListInfo;
-            sWeightedCorner_Chunk   WCorners[WCornerListInfo.NumberOfCorners];
-            sVertMapData_Chunk      BoneVertMapInfo;
-            sVertMappingIndex_Chunk BoneVertMapping[VertListInfo.NumberOfVerts] <optimize=false>;        
+        if (Info.Header.MajorVersion < 4) {
+            sCornerList_Chunk       LitCornerListInfo;
+            sLitCorner_Chunk        LitCorners[LitCornerListInfo.NumberOfCorners];
         }
+        
+        if ((Info.Header.MajorVersion > 1) || (Info.Header.MajorVersion == 1 && Info.Header.MinorVersion >= 3)) {
+            sCornerList_Chunk       WeightedCornerListInfo;
+            sWeightedCorner_Chunk   WeightedCorners[WeightedCornerListInfo.NumberOfCorners];
+        }
+        
+        sVertMapData_Chunk      BoneVertMapInfo;
+        sVertMappingIndex_Chunk BoneVertMapping[VertListInfo.NumberOfVerts] <optimize=false>;        
         
         sTriangleList_Chunk     TriListInfo;
      
@@ -332,7 +335,7 @@ struct ASP_SubMeshes {
             if (NumberOfVertsInfluenced < 0) {
                 // This is the primary bone of rigid mesh, all verts are weighted to it.
             } 
-            else {
+            else if (NumberOfVertsInfluenced > 0) {
                 struct sBoneVertWeightPair {
                     DWORD index;
                     float weight;
