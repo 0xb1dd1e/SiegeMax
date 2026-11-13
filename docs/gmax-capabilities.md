@@ -28,6 +28,16 @@ animation system in SiegeMax.
 | **OS / misc** | `cui.registerDialogBar` (dockable rollouts, new), `SubRollout` (new), `callbacks` ✅ | `DOSCommand`, `ShellLaunch`, `createOLEObject`, `render`, `CreatePreview`, `schematicView` |
 | **Limits** | — | Strings ≤ **15,000 characters**; `memStream.readToken`/`readBlock` ≤ 5,120 characters |
 
+## Verified in a running gmax (4.2 build 128)
+
+- `saveNodes` is present as a name but fails with `Feature not available: "saveNodes"`; `saveSelected`
+  does not exist. The File menu's **Save Selected** is UI only (it records as `max file save selected`
+  and opens a file dialog), and it writes just the selected objects.
+- No `getCurrentException()`: a `catch` cannot read the error text. An error in a function defined in a
+  script file opens that file's editor window at the error location.
+- `apropos "text"` lists names (not signatures) and is the quick way to test whether a function exists.
+- Map channels are only -2..1; `newRolloutFloater` clamps the width (see `scripts/ClaudeLink/MEMORY.md`).
+
 ## Rules that shape the design
 
 1. **IK Limb is a two-bone analytic solver.** It needs a three-bone chain
