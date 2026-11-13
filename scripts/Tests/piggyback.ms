@@ -2,44 +2,14 @@
 -- Piggyback: get data out of gmax  (Phase 0 of Docs/character-studio-plan.md)
 --
 -- gmax cannot write files, so bytes are hidden in the numbers of a generated mesh and carried
--- out in a file gmax CAN write. Read either route back outside gmax with
---   scripts/Tests/tools/extract_piggyback.py   (see its --help)
+-- out in a file gmax CAN write: a .gmax scene saved with saveMaxFile (PiggybackSave, "Dense mode"
+-- below). The payload sits in map channel 1, 24 bits per float (9 bytes per map vertex, ~75%
+-- efficient). Verified byte-exact at 1 MB and 5 MB per call. scripts/RigTools/DataOut.ms wraps it.
 --
--- Route A - ASP export (PiggybackExport / Encode / Decode):
---   The DSiegeUtils ASP exporter (node names starting "M_") stripifies and reorders triangles
---   and dedupes corners, so face indices do not survive. Vertex positions are written as plain
---   floats (BVTX chunk), so the payload rides there. Each vertex is [seq, hi, lo]:
---     seq  vertex sequence number (0-based) - lets the reader ignore ordering
---     hi   2 data bytes: b1 + b2*256   (0..65535)
---     lo   2 data bytes: b3 + b4*256
---   so 4 payload bytes per vertex. Special vertices:
---     seq 0: [0, magic + 256*chunkIdx, dataByteCount mod 65536]
---            magic 83 = raw payload, 84 = RLE-compressed payload (see PB_Compress)
---     seq 1: [1, checksum (sum of data bytes mod 256) + 256*chunkCount, dataByteCount / 65536]
---     seq 2..: data; trailing filler vertices [seq,0,0] pad the count to a multiple of 3 so
---     every vertex is used by a (non-repeating) triangle. Triangles are [3j+1, 3j+2, 3j+3].
---   The exporter multiplies positions by the scene's meter scale (0.001 seen), so 16-bit fields
---   are used (65535 -> 65.535 is exact in float32) and the reader auto-calibrates the scale
---   from seq 1. In the ASP file hi/lo are not swapped (swapYZ stays false); abs() guards
---   negation. Limit: corner indices are 16-bit, so about 65,535 vertices (~262 KB) per mesh;
---   larger payloads become several files (m_encoded_001, _002, ...).
---
--- Route B - scene file (PiggybackSave, "Dense mode" below):
---   saveMaxFile writes a .gmax scene. No exporter, no Naming Key, no vertex cap, positions are
---   unscaled. The payload sits in a map channel, 9 bytes per map vertex (~75% efficient).
---   This is the route DataOut.ms uses. Verified byte-exact at 1 MB and 5 MB.
+-- Read the result outside gmax with scripts/ClaudeLink/Extract-Piggyback.ps1 (pure PowerShell).
 --
 -- The listener only repaints when a script ends; PB_Log prints and forces a repaint.
 -- ****************************
-
-global PB_MAGIC = 83          -- 'S' raw payload
-global PB_MAGIC_RLE = 84      -- 'T' RLE-compressed payload
--- Max data bytes per mesh for route A. The ASP exporter indexes corners with 16-bit values
--- (ASPexp.h TriIndexArray = vector<WORD>, NvTriStrip unsigned short), so a mesh can have
--- at most ~65535 vertices = ~262000 payload bytes at 4 bytes per vertex. Verified through the
--- exporter up to 262000 bytes (65502 vertices); 264000 bytes (66002 vertices) produced no file.
--- 256000 (64002 vertices) leaves a margin.
-global PB_CHUNK_BYTES = 256000
 
 -- Simple PackBits-style RLE. Control byte c:
 --   0..127   : copy the next c+1 bytes literally
@@ -112,125 +82,6 @@ fn PB_Decompress buf =
 
 fn PB_Byte buffer i = if i <= buffer.count then buffer[i] else 0
 
--- Build the vertex and face lists for one chunk
-fn PB_ChunkData buffer chunkIdx chunkCount magic =
-(
-	local n = buffer.count
-	local sum = 0
-	for i = 1 to n do sum += buffer[i]
-	sum = (mod sum 256) as integer
-
-	local dataVerts = (n + 3) / 4
-	local total = 2 + dataVerts
-	while (mod total 3) != 0 do total += 1
-
-	local verts = #()
-	append verts [0, magic + 256 * chunkIdx, mod n 65536]
-	append verts [1, sum + 256 * chunkCount, n / 65536]
-
-	for v = 0 to (dataVerts - 1) do
-	(
-		local b = 4 * v
-		local hi = (PB_Byte buffer (b+1)) + (PB_Byte buffer (b+2)) * 256
-		local lo = (PB_Byte buffer (b+3)) + (PB_Byte buffer (b+4)) * 256
-		append verts [2 + v, hi, lo]
-	)
-	for k = verts.count to (total - 1) do append verts [k, 0, 0]
-
-	local f = for j = 0 to (total / 3 - 1) collect [3*j+1, 3*j+2, 3*j+3]
-	return #(verts, f)
-)
-
--- Build a single chunk mesh from a slice of bytes
-fn PB_EncodeChunk buffer chunkIdx chunkCount meshName magic =
-(
-	local d = PB_ChunkData buffer chunkIdx chunkCount magic
-	return (mesh faces:d[2] vertices:d[1] name:meshName)
-)
-
--- Encode a byte array (values 0..255) into one or more meshes.
--- With compress:true the whole payload is RLE-compressed first, but only
--- if that actually makes it smaller (the magic byte records which).
-fn Encode buffer baseName:"m_encoded" compress:true =
-(
-	local meshes = #()
-	local magic = PB_MAGIC
-	if compress then
-	(
-		local packed = PB_Compress buffer
-		if packed.count < buffer.count then (buffer = packed; magic = PB_MAGIC_RLE)
-	)
-	local total = buffer.count
-	local chunkCount = amax 1 ((total + PB_CHUNK_BYTES - 1) / PB_CHUNK_BYTES)
-
-	for c = 0 to (chunkCount - 1) do
-	(
-		local first = c * PB_CHUNK_BYTES + 1
-		local last = amin total (first + PB_CHUNK_BYTES - 1)
-		local slice = for i = first to last collect buffer[i]
-		local num = (c + 1) as string
-		while num.count < 3 do num = "0" + num
-		append meshes (PB_EncodeChunk slice c chunkCount (baseName + "_" + num) magic)
-	)
-	return meshes
-)
-
-fn PB_Int f = (floor ((abs f) + 0.5)) as integer
-fn PB_Hi v sc sw = if sw then PB_Int (v.z * sc) else PB_Int (v.y * sc)
-fn PB_Lo v sc sw = if sw then PB_Int (v.y * sc) else PB_Int (v.z * sc)
-
--- Decode one chunk from an array of vertex positions (any order).
--- Returns #(chunkIdx, chunkCount, bytes, isCompressed) or undefined.
--- The position scale (exporter's unit scale) is detected from the data.
-fn PB_DecodeVerts verts swapYZ:false =
-(
-	if verts.count < 3 then return undefined
-
-	-- seq 0 has x = 0 and seq 1 has the next smallest x, which equals the scale
-	local xs = for v in verts collect (abs v.x)
-	sort xs
-	if xs[2] <= 0.0 then return undefined
-	local sc = 1.0 / xs[2]
-
-	local lookup = #()
-	lookup.count = verts.count
-	for v in verts do
-	(
-		local seq = PB_Int (v.x * sc)
-		if seq < verts.count then lookup[seq + 1] = v
-	)
-	if lookup[1] == undefined or lookup[2] == undefined then return undefined
-
-	local h = lookup[1]
-	local hy = PB_Hi h sc swapYZ
-	local nLow = PB_Lo h sc swapYZ
-	local magic = (mod hy 256) as integer
-	if magic != PB_MAGIC and magic != PB_MAGIC_RLE then return undefined
-	local chunkIdx = (hy / 256) as integer
-	local v2 = PB_Hi lookup[2] sc swapYZ
-	local sum = (mod v2 256) as integer
-	local chunkCount = (v2 / 256) as integer
-	local n = nLow + (PB_Lo lookup[2] sc swapYZ) * 65536
-
-	local bytes = #()
-	local dataVerts = (n + 3) / 4
-	for v = 0 to (dataVerts - 1) do
-	(
-		local vt = lookup[3 + v]
-		if vt == undefined then return undefined
-		local hi = PB_Hi vt sc swapYZ
-		local lo = PB_Lo vt sc swapYZ
-		join bytes #((mod hi 256) as integer, (hi / 256) as integer, (mod lo 256) as integer, (lo / 256) as integer)
-	)
-	bytes.count = n
-
-	local check = 0
-	for b in bytes do check += b
-	if (mod check 256) != sum then return undefined
-
-	return #(chunkIdx, chunkCount, bytes, (magic == PB_MAGIC_RLE))
-)
-
 -- Put decoded chunks (any order) back together, decompressing if needed. Returns bytes or undefined
 fn PB_Assemble chunks =
 (
@@ -248,21 +99,6 @@ fn PB_Assemble chunks =
 	)
 	if chunks[1][4] then result = PB_Decompress result
 	return result
-)
-
--- Decode one mesh or an array of chunk meshes (any order). Returns bytes or undefined
-fn Decode piggybacked =
-(
-	local meshes = if classOf piggybacked == Array then piggybacked else #(piggybacked)
-	local chunks = #()
-	for m in meshes do
-	(
-		local verts = for i = 1 to m.numverts collect (getVert m i)
-		local c = PB_DecodeVerts verts
-		if c == undefined then return undefined
-		append chunks c
-	)
-	return (PB_Assemble chunks)
 )
 
 -- Strings (one byte per character)
@@ -326,32 +162,18 @@ fn DecodeFloats bytes =
 		(BytesToFloat bytes[4*i+1] bytes[4*i+2] bytes[4*i+3] bytes[4*i+4])
 )
 
--- In-memory round trip test (no export involved)
+-- In-memory checks of the helpers (strings, RLE, floats); no files involved. See also TestDense.
 fn TestIt =
 (
 	local ok = true
 
-	-- Strings of several lengths (covers all padding cases)
+	-- Strings of several lengths
 	for msg in #("This is my secret message!", "a", "ab", "abc", "abcd") do
 	(
-		local meshes = Encode (EncodeString msg)
-		local outMsg = DecodeString (Decode meshes)
+		local outMsg = DecodeString (EncodeString msg)
 		format " In: %\nOut: %\n" msg outMsg
 		if outMsg != msg then ok = false
-		delete meshes
 	)
-
-	-- All byte values, larger than the vertex count, forcing multiple chunks
-	local oldChunk = PB_CHUNK_BYTES
-	PB_CHUNK_BYTES = 1000
-	local big = for i = 0 to 2999 collect (mod (i * 7) 256 as integer)
-	local meshes = Encode big
-	local back = Decode meshes
-	if back == undefined or back.count != big.count then ok = false
-	else for i = 1 to big.count do if back[i] != big[i] then ok = false
-	format "Multi-chunk: % meshes, %\n" meshes.count (if ok then "ok" else "FAILED")
-	delete meshes
-	PB_CHUNK_BYTES = oldChunk
 
 	-- RLE: runs, long runs (>129), literals longer than 128, mixed, and incompressible data
 	local rleCases = #()
@@ -370,15 +192,6 @@ fn TestIt =
 		if not same then ok = false
 	)
 
-	-- Compressed encode/decode through the meshes (zeros compress, so magic 84 is used)
-	local zeros = for i = 1 to 5000 collect 0
-	local zm = Encode zeros
-	local zback = Decode zm
-	local zsame = (zback != undefined and zback.count == zeros.count)
-	format "Compressed mesh: % verts for % bytes, %\n" zm[1].numverts zeros.count (if zsame then "ok" else "FAILED")
-	if not zsame then ok = false
-	delete zm
-
 	-- Floats
 	local fin = #(1.0, -2.5, 0.0, 3.14159, 1000.125, -0.001)
 	local fout = DecodeFloats (EncodeFloats fin)
@@ -392,38 +205,7 @@ fn TestIt =
 	return ok
 )
 
--- Encode bytes and export the chunk meshes with the DSiegeUtils exporter.
--- Meshes get a standard material because the quad-menu export path refuses unmaterialed objects.
-fn PiggybackExport buffer =
-(
-	local meshes = undefined
-	try (disableSceneRedraw()) catch ()
-	with undo off with redraw off
-	(
-	meshes = Encode buffer
-	for m in meshes do
-	(
-		if m.material == undefined then m.material = standardMaterial name:"pb_mat"
-		select m
-		format "Exporting %...\n" m.name
-		-- Destination comes from the Naming Key (BuildASPLocation) under %out%/art, not a dialog.
-		-- The node name prefix picks the exporter: M_ -> ASP, T_ -> SNO, A_ -> PRS.
-		local n = dsExportSelected noPrompt:true canStomp:true makePath:true
-		format "  exported % file(s)\n" n
-	)
-	)
-	try (enableSceneRedraw()) catch ()
-	return meshes
-)
-
--- Quick test: export a short text message through the ASP exporter
-fn TestExport =
-(
-	return (PiggybackExport (EncodeString "This is my secret message!"))
-)
-
-
--- Deterministic test payload (the Python extractor's --verify uses the same formula)
+-- Deterministic test payload (Extract-Piggyback.ps1 -Verify uses the same formula)
 fn PB_TestPattern n =
 (
 	for i = 0 to (n - 1) collect ((mod (i * 7 + (i / 256) * 13 + 5) 256) as integer)
@@ -436,43 +218,6 @@ fn PB_Log msg =
 	try (flush stdout) catch ()
 	try (windows.processPostedMessages()) catch ()
 )
-
--- Export one single-chunk mesh per size to find the ASP exporter's limits.
--- Files: m_pbtest<size>_001.ASP in the art/meshes output folder.
-fn LimitTest sizes =
-(
-	local oldChunk = PB_CHUNK_BYTES
-	-- Same speed-ups as ASPImport.ms / StitchTools.ms: nothing is drawn or kept for undo
-	try (disableSceneRedraw()) catch ()
-	with undo off with redraw off
-	(
-	for s in sizes do
-	(
-		PB_Log ("size " + (s as string) + " bytes: building...")
-		PB_CHUNK_BYTES = s + 1
-		local t0 = timestamp()
-		local data = PB_TestPattern s
-		PB_Log ("  pattern built in " + ((timestamp() - t0) as string) + " ms")
-		t0 = timestamp()
-		local meshes = Encode data baseName:("m_pbtest" + (s as string))
-		PB_Log ("  encoded to " + (meshes[1].numverts as string) + " verts in " + ((timestamp() - t0) as string) + " ms; exporting...")
-		for m in meshes do
-		(
-			m.material = standardMaterial name:"pb_mat"
-			select m
-			t0 = timestamp()
-			local n = try (dsExportSelected noPrompt:true canStomp:true makePath:true) catch ("ERROR: dsExportSelected failed (gmax has no getCurrentException; the Listener shows the message if run raw)")
-			PB_Log ("  export result: " + (n as string) + " in " + ((timestamp() - t0) as string) + " ms")
-		)
-		delete meshes
-		clearUndoBuffer()
-	)
-	)
-	try (enableSceneRedraw()) catch ()
-	PB_CHUNK_BYTES = oldChunk
-	PB_Log "LimitTest done"
-)
-
 
 -- ****************************
 -- Dense mode (scene files only): payload rides in a custom map channel
@@ -637,7 +382,7 @@ fn TestDense =
 	return ok
 )
 
--- Encode bytes and save them in a .gmax scene file with saveMaxFile (route B, dense layout).
+-- Encode bytes and save them in a .gmax scene file with saveMaxFile (dense layout).
 -- The payload meshes are added to the current scene, the scene is saved, and the meshes are
 -- deleted again. The extractor finds the payload by signature, so the rest of the scene in
 -- the file is harmless. NOTE: saveMaxFile changes the current scene's file name; check
@@ -666,7 +411,7 @@ fn PiggybackSave buffer filename chunkBytes:PB_DENSE_CHUNK_BYTES compress:true =
 )
 
 -- Size probe for the scene route: one scene file per size, with timings.
--- Files: piggyback_dense_<size>.gmax in the scene folder; check each with extract_piggyback.py --verify.
+-- Files: piggyback_dense_<size>.gmax in the scene folder; check each with Extract-Piggyback.ps1 -Verify.
 -- Compression is off (the pattern has no runs, and compressing would double the memory used).
 -- MAXScript itself runs out of memory building the test array at about 20 MB, even with a 500 MB heap.
 fn LimitTestSave sizes =
@@ -698,22 +443,15 @@ fn TestSaveDense size =
 
 /*
 Run from the Listener (paste a line into the top pane, or drive it with scripts/ClaudeLink).
-Then read the output files outside gmax with scripts/Tests/tools/extract_piggyback.py.
+Then read the output files outside gmax with scripts/ClaudeLink/Extract-Piggyback.ps1.
 
 -- 1. in-memory checks, no files (expect PASS)
 clearlistener(); filein ((GetDir #scripts) +"\\Tests\\piggyback.ms"); TestIt(); TestDense(); setListenerSel #(0,0)
 
--- 2. route A: export a small payload through DSiegeUtils (file goes to %out%/art/meshes)
-clearlistener(); filein ((GetDir #scripts) +"\\Tests\\piggyback.ms"); TestExport(); setListenerSel #(0,0)
-delete (for o in objects where (matchPattern o.name pattern:"m_encoded_*") collect o)
-
--- 3. route A limit probe (264000 bytes = 66002 vertices is past the 16-bit cap and produces no file)
-clearlistener(); filein ((GetDir #scripts) +"\\Tests\\piggyback.ms"); LimitTest #(260000, 262000, 264000); setListenerSel #(0,0)
-
--- 4. route B: save a 1 MB payload in a scene file, and a size probe
+-- 2. save a 1 MB payload in a scene file (piggyback_dense.gmax in the scene folder), and a size probe
 clearlistener(); filein ((GetDir #scripts) +"\\Tests\\piggyback.ms"); TestSaveDense 1000000; setListenerSel #(0,0)
 clearlistener(); filein ((GetDir #scripts) +"\\Tests\\piggyback.ms"); LimitTestSave #(1000000, 5000000); setListenerSel #(0,0)
 
--- 5. the DataOut wrapper (writes DataOut_hello.gmax in the scene folder)
+-- 3. the DataOut wrapper (writes DataOut_hello.gmax in the scene folder)
 clearlistener(); filein ((GetDir #scripts) +"\\RigTools\\DataOut.ms"); DataOutSendString "hello" "Hello from gmax!"; setListenerSel #(0,0)
 */

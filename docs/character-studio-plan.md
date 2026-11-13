@@ -54,45 +54,37 @@ Bake → plain DS skeleton with linear keys → DSiegeUtils export
 ## Phases
 
 ### Phase 0 — Data-out channel ("piggyback") — DONE
-Files: `scripts/Tests/piggyback.ms`, `scripts/Tests/tools/extract_piggyback.py`,
-`scripts/Tests/tools/test_extract_piggyback.py`, `scripts/RigTools/DataOut.ms`.
+Files: `scripts/Tests/piggyback.ms`, `scripts/RigTools/DataOut.ms`,
+`scripts/ClaudeLink/Extract-Piggyback.ps1`.
 gmax cannot write files, so anything the rig produces (baked animation, clip data,
 diagnostics) has to be smuggled out inside a file gmax *can* write. Everything later in
 this plan that needs data outside gmax depends on this step.
-- **Codec** (`piggyback.ms`): bytes are packed into the float data of a generated mesh, with a
-  header (magic, chunk index/count, byte count, checksum), chunking, optional RLE compaction
-  (kept only if it makes the payload smaller), and helpers for strings and 32-bit floats.
-  The full layouts are documented in the header comment of `piggyback.ms`.
-- **Route A — DSiegeUtils ASP export** (`PiggybackExport`, `Encode`/`Decode`): node name must
-  start `M_`; the file lands under `%out%/art` via the Naming Key (no dialog; `dsExportSelected
-  noPrompt:true canStomp:true makePath:true`). Face indices do **not** survive (the stripifier
-  reorders them and corners are deduped) and positions are scaled by 0.001, so the payload rides
-  in vertex positions: 16 bits per float, 4 bytes per vertex, sequence number in `x`, scale
-  auto-detected by the reader. **Limit:** corner indices are 16-bit (`ASPexp.h`
-  `vector<WORD>`, NvTriStrip), so about 65,535 vertices (~262 KB) per mesh. Verified byte-exact
-  at 1 KB, 4 KB, 16 KB, 64 KB, 256 KB, 260 KB and 262,000 bytes (65,502 vertices);
-  264,000 bytes (66,002 vertices) produced no file. Larger payloads become several files.
-- **Route B — `.gmax` scene file** (`PiggybackSave`, `PB_DenseEncode`/`PB_DenseDecode`, uses
-  `saveMaxFile`): no exporter, no Naming Key, no vertex cap, positions unscaled. The payload
-  sits in map channel 1 (gmax only has channels -2..1) as 24-bit integers in float32, 9 bytes
-  per map vertex (~75% efficient); the map vertices need no faces and survive the save. Verified
-  byte-exact at 1 MB (1.4 MB file) and 5 MB (two chunks, 6.7 MB file, about 10 s). This is the
-  route `DataOut.ms` uses. The earlier vertex-layout scene save (4.7 MB file for 1 MB) was
-  dropped in favour of it.
-- **gmax facts learned:** `saveSelected`/`saveNodes` do not exist; `holdMaxFile` /
-  `fetchMaxFile` works but shows an "about to fetch" dialog, so the scene is saved whole with the
-  payload meshes added and then removed; `saveMaxFile` renames the open scene to the target file
-  (check File > Save As before saving real work).
+- **Codec** (`piggyback.ms`): bytes are packed into the map-channel data of a generated
+  one-triangle mesh, which is saved in a `.gmax` scene with `saveMaxFile` (`PiggybackSave`,
+  `PB_DenseEncode`/`PB_DenseDecode`). Map channel 1 is used (gmax only has channels -2..1); the
+  payload is 24-bit integers in float32, 9 bytes per map vertex (~75% efficient), and map vertices
+  need no faces and survive the save. There is a header (magic, chunk index/count, byte count,
+  checksum), chunking, optional RLE compaction (kept only if it makes the payload smaller) and
+  helpers for strings and 32-bit floats. The layout is documented in `piggyback.ms`.
+  Verified byte-exact at 1 MB (1.4 MB file) and 5 MB (two chunks, 6.7 MB file, about 10 s).
+- **gmax facts learned:** `saveSelected`/`saveNodes` do not exist (`saveNodes` answers "Feature not
+  available"); `holdMaxFile` / `fetchMaxFile` works but shows an "about to fetch" dialog, so the
+  scene is saved whole with the payload meshes added and then removed; `saveMaxFile` renames the
+  open scene to the target file (check File > Save As before saving real work).
 - **Size limit:** MAXScript's own heap, not the format. Building a 20M-element byte array runs
   out of scripter memory even with `heapSize` at 500 MB. About 5-10 MB per call is safe; send
   bigger data as several calls (a baked clip is well under 1 MB).
-- **Reader** (`extract_piggyback.py`): reads `.asp` (BVTX chunk, scale auto-detected) and `.gmax`
-  (OLE `Scene` stream, dense chunks found by a float32 signature, needs `olefile`), checks magic
-  and checksum, joins chunks, RLE-decompresses. `--verify` checks the deterministic pattern used
-  by `LimitTest` / `LimitTestSave`; `--text`, `-o`, `--prefix`, `--report`.
-- **Tests:** `python scripts/Tests/tools/test_extract_piggyback.py` (12 cases, no gmax needed:
-  RLE edge cases, ASP vertex decode incl. corruption, dense-chunk scan inside a fake scene
-  stream). In gmax: `TestIt()` and `TestDense()` (in-memory round trips) and the limit probes.
+- **Reader** (`scripts/ClaudeLink/Extract-Piggyback.ps1`): pure PowerShell, no compiled code, no
+  packages. A `.gmax` is an OLE compound file, so the script contains a small reader for it (header,
+  sector allocation table, directory, sector chains; the .NET class library has none), finds the
+  dense chunk header by a float32 signature, checks the checksum, joins the chunks and expands RLE.
+  It uses native .NET calls for the heavy lifting (`Array.IndexOf`, `Buffer.BlockCopy`, LINQ,
+  SHA256), so a 1 MB payload reads in under a second. Options: `-Text`, `-Out`, `-Verify`,
+  `-Prefix`, `-Report`. The OLE reader was checked against an independent OLE library on seven real
+  gmax scenes (15 KB to 1.2 MB): identical `Scene` stream bytes.
+- **Tests:** `Extract-Piggyback.ps1 -SelfTest` (14 checks, no gmax needed: RLE edge cases, chunk
+  scan inside other data, corruption, and an OLE file generated on the fly). In gmax: `TestIt()` and
+  `TestDense()` (in-memory round trips) and the size probes.
 - **API for later phases:** `DataOutSend label bytes` (also `DataOutSendString`,
   `DataOutSendFloats`) in `scripts/RigTools/DataOut.ms` writes `<scene dir>/DataOut_<label>.gmax`;
   one extractor command gets it back. Phase 7 (bake) and Phase 5 (clip files) use it.
@@ -100,7 +92,7 @@ this plan that needs data outside gmax depends on this step.
   Phase 0b so Claude can run them).
 
 ### Phase 0b — Claude Link (talking to a running gmax) — DONE
-Files: `scripts/ClaudeLink/ClaudeLink.ms`, `scripts/ClaudeLink/gmax_run.ps1`,
+Files: `scripts/ClaudeLink/ClaudeLink.ms`, `scripts/ClaudeLink/gmax_run.ps1`, `scripts/ClaudeLink/Extract-Piggyback.ps1`,
 `scripts/ClaudeLink/MEMORY.md` (working notes: commands, rules of engagement, gmax traps; read first).
 Phase 0 gets data *out*; this lets Claude *drive* gmax and read the answer, so tests no longer
 need the user to paste lines and paste output back, while the user keeps control.
@@ -238,7 +230,7 @@ Files: `scripts/RigTools/RigBake.ms`.
 
 | Step | State |
 |---|---|
-| Phase 0: data-out channel. ASP route verified byte-exact up to 262,000 bytes (the 16-bit corner cap is about 65,535 vertices); scene-file route verified byte-exact at 1 MB (1.4 MB file) and 5 MB (6.7 MB file, ~10 s); `DataOutSend` verified with a text round trip; extractor self-test (12 cases) passes. Practical limit about 5-10 MB per call (MAXScript heap) | **Done.** `scripts/Tests/piggyback.ms`, `scripts/Tests/tools/extract_piggyback.py`, `scripts/Tests/tools/test_extract_piggyback.py`, `scripts/RigTools/DataOut.ms` |
+| Phase 0: data-out channel. Scene-file route verified byte-exact at 1 MB (1.4 MB file) and 5 MB (6.7 MB file, ~10 s); `DataOutSend` verified with a text round trip; the pure-PowerShell extractor reads 1 MB in under a second and its self-test (14 checks) passes. Practical limit about 5-10 MB per call (MAXScript heap) | **Done.** `scripts/Tests/piggyback.ms`, `scripts/RigTools/DataOut.ms`, `scripts/ClaudeLink/Extract-Piggyback.ps1` |
 | Phase 0b: Claude Link (dialog + `gmax_run.ps1` helper): run code in gmax, read replies, Pause / Resume / Emergency Stop and the compact layout verified, works with the Listener open, closed or minimized | **Done.** `scripts/ClaudeLink/ClaudeLink.ms`, `scripts/ClaudeLink/gmax_run.ps1` |
 | Phase 1: COM helper, promote skeleton, role detection, rest pose, Figure Mode | **Written, not yet run in gmax.** `scripts/plugins/SiegeRigCOM.ms`, `scripts/RigTools/RigBuilder.ms`, `scripts/Add-Ons/InstallSiegeRig.ms` |
 | Phase 2 onward | Not started |
@@ -282,5 +274,5 @@ Phase 1 limits worth knowing:
 | IK Limb + animated Link constraint on goals behaves badly | Verify first in M1; fallback is keyed goal positions with "snap to anchor" tools |
 | Script controllers slow on full skeleton | Keep optional; bake before export |
 | Exporter doesn't handle constrained/scripted nodes | Always bake (Phase 7) |
-| No file writes | All data in scene; clip files via `saveMaxFile`; data out via the Phase 0 piggyback (ASP export or `.gmax` scene save) |
+| No file writes | All data in scene; clip files via `saveMaxFile`; data out via the Phase 0 piggyback (`.gmax` scene save) |
 | 1000-save session limit | Warn when clip-saving many files in one session |

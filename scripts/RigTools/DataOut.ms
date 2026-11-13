@@ -5,7 +5,7 @@
 -- gmax can write freely) as a payload hidden in a map channel. See scripts/Tests/piggyback.ms
 -- for the codec and its limits. Read the result outside gmax with:
 --
---   python scripts/Tests/tools/extract_piggyback.py <file.gmax> [-o out.bin] [--text]
+--   scripts\ClaudeLink\Extract-Piggyback.ps1 <file.gmax> [-Out out.bin] [-Text]
 --
 -- Usage from MAXScript:
 --   DataOutSend "bake_idle" bytes               -- an array of integers 0..255
@@ -46,7 +46,7 @@ fn DataOutSend label bytes =
 	if ok then
 	(
 		PB_Log ("DataOut: " + (bytes.count as string) + " bytes -> " + path)
-		PB_Log ("  read with: python extract_piggyback.py \"" + path + "\"")
+		PB_Log ("  read with: Extract-Piggyback.ps1 \"" + path + "\"")
 		return path
 	)
 	return undefined

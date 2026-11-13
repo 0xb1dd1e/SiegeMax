@@ -26,8 +26,8 @@ gmax_run.ps1 -Cmd '<line>'           run one raw line; output/errors come from t
 gmax_run.ps1 -Watch [-Since N]       follow what the user does on screen (macro recorder pane), see below
 gmax_run.ps1 -ShowListener | -HideListener | -Restore | -Full | -Timeout N
 ```
-Run it from PowerShell (`powershell`); the `python` in Git Bash has `olefile`, PowerShell's does not
-(the piggyback extractor for `.gmax` needs olefile, so run that one from Git Bash).
+Run it from PowerShell (`powershell`). Data that gmax sends out through DataOut is read back with
+`scripts/ClaudeLink/Extract-Piggyback.ps1 <file.gmax> -Text` (pure PowerShell, no extra packages).
 
 ## Which command to use
 - **`-Eval`** is the default. The code runs inside `ClaudeEval`, only the returned value comes back
@@ -137,9 +137,10 @@ which menu items are ticked) by reading window items and their state rather than
   in a script file also pop that file's editor window.
 
 ## Where things are
-- `scripts/ClaudeLink/ClaudeLink.ms` the dialog; `gmax_run.ps1` the helper; this file.
-- Data out of gmax: `scripts/Tests/piggyback.ms`, `scripts/RigTools/DataOut.ms`, extractor in
-  `scripts/Tests/tools/` (see Docs/character-studio-plan.md, Phases 0 and 0b).
+- `scripts/ClaudeLink/ClaudeLink.ms` the dialog; `gmax_run.ps1` the helper; `Extract-Piggyback.ps1`
+  the reader for data gmax sends out; this file.
+- Data out of gmax: `scripts/Tests/piggyback.ms` (the codec), `scripts/RigTools/DataOut.ms` (the
+  wrapper); see Docs/character-studio-plan.md, Phases 0 and 0b.
 
 ## Verified log
 - 2026-11-12: Say / Eval / Cmd / Watch / Status / Read / Restore / ShowListener / HideListener tested;

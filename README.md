@@ -46,24 +46,27 @@ found while building it are in [`scripts/ClaudeLink/MEMORY.md`](scripts/ClaudeLi
 
 ## Getting data out of gmax
 
-gmax can't write files either, so data leaves hidden inside the one file it *can* write.
-`scripts/Tests/piggyback.ms` packs bytes into the numbers of a generated mesh:
+gmax can't write files either, so data leaves hidden inside the one file it *can* write: a scene
+saved with `saveMaxFile`. `scripts/Tests/piggyback.ms` packs bytes into the map-channel numbers of a
+generated one-triangle mesh (24 bits per float, 9 bytes per map vertex), with a header, checksum,
+chunking and optional RLE compaction. Verified byte-exact at 1 MB and 5 MB per call.
+`scripts/RigTools/DataOut.ms` wraps it:
 
-| Route | Carrier | Verified |
-|---|---|---|
-| ASP export (`PiggybackExport`) | vertex positions in a DSiegeUtils `.asp`, 4 bytes per vertex | byte-exact up to 262,000 bytes per mesh (16-bit corner index limit) |
-| Scene file (`PiggybackSave`) | map channel 1 in a `.gmax` scene saved with `saveMaxFile`, 9 bytes per map vertex | byte-exact at 1 MB and 5 MB per call |
-
-Header, checksum, chunking and optional RLE compaction are built in.
-`scripts/RigTools/DataOut.ms` wraps it: `DataOutSend`, `DataOutSendString`, `DataOutSendFloats`.
-Read the result outside gmax with the extractor:
-
-```
-python scripts/Tests/tools/extract_piggyback.py <file.asp | file.gmax | folder> [--text] [-o out.bin]
-python scripts/Tests/tools/test_extract_piggyback.py     # self-test, no gmax needed
+```maxscript
+DataOutSend "bake_idle" bytes                  -- an array of integers 0..255
+DataOutSendString "notes" "any text"
+DataOutSendFloats "keys" #(1.0, 2.5, 3.0)      -- 32-bit floats
 ```
 
-Reading `.gmax` files needs the `olefile` package (`pip install olefile`).
+Read the result outside gmax with the extractor. It is pure PowerShell (no compiled code, no Python,
+no packages): it contains a small OLE compound-file reader for the `.gmax`, finds the payload, checks
+it and expands it.
+
+```powershell
+scripts\ClaudeLink\Extract-Piggyback.ps1 Scenes\DataOut_notes.gmax -Text
+scripts\ClaudeLink\Extract-Piggyback.ps1 Scenes\DataOut_keys.gmax -Out keys.bin
+scripts\ClaudeLink\Extract-Piggyback.ps1 -SelfTest       # no gmax needed
+```
 
 ## SiegeRig: a Character Studio equivalent for gmax
 
